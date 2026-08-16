@@ -1,4 +1,5 @@
 {
+  "buildCommand": "npm run site:build",
   "cleanUrls": true,
-  "outputDirectory": "site"
+  "outputDirectory": "site/dist"
 }

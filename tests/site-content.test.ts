@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildSetupPrompt } from '../site/src/content';
+import { buildSetupPrompt } from '../site/src/content.js';
 
 describe('BrandPreflight setup prompt', () => {
   it('includes the selected agent context and hosted skill URL', () => {

@@ -55,23 +55,35 @@
     "test": "vitest run",
     "test:container": "node scripts/run-container-smoke.mjs",
     "test:coverage": "vitest run --coverage",
+    "site:dev": "vite --config site/vite.config.ts",
+    "site:typecheck": "tsc -p site/tsconfig.json --noEmit",
+    "site:build": "vite build --config site/vite.config.ts",
+    "site:preview": "vite preview --config site/vite.config.ts",
     "package:check": "npm pack --dry-run",
     "prepublishOnly": "npm run build",
     "cli": "tsx src/cli.ts",
-    "check": "npm run typecheck && npm run test:coverage && npm run build"
+    "check": "npm run typecheck && npm run site:typecheck && npm run test:coverage && npm run build && npm run site:build"
   },
   "dependencies": {
+    "@splinetool/react-spline": "^4.1.0",
+    "@splinetool/runtime": "^1.12.98",
     "pdf-parse": "2.4.5",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
     "zod": "4.4.3"
   },
   "devDependencies": {
     "@modelcontextprotocol/client": "2.0.0",
     "@modelcontextprotocol/server": "2.0.0",
+    "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.5",
     "@types/node": "24.10.1",
     "@vitest/coverage-v8": "4.1.0",
+    "@vitejs/plugin-react": "^5.0.4",
     "fast-check": "4.3.0",
     "tsx": "4.20.6",
     "typescript": "7.0.2",
+    "vite": "^7.1.12",
     "vitest": "4.1.0"
   }
 }

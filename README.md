@@ -51,8 +51,14 @@ Raw media stays with the agent unless you explicitly choose otherwise. BrandPref
 
 ```bash
 npm install
+npm run site:dev
 npm run check
 npm run package:check
 ```
+
+The hosted BrandPreflight homepage is a Vite-powered React app in `site/`. The hero
+loads the shared Spline scene from the portfolio reference with reduced-motion and
+off-screen pause handling. `npm run site:build` produces the Vercel output in
+`site/dist`.
 
 MIT License.
