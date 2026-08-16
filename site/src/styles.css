@@ -132,7 +132,24 @@ a:focus-visible {
   place-items: center;
   padding: 24px;
   color: #fff;
+  pointer-events: none;
   filter: drop-shadow(0 3px 18px rgba(0, 0, 0, 0.72));
+}
+
+.centered-prompt,
+.portfolio-scroll-button,
+.home-logo {
+  pointer-events: auto;
+}
+
+.home-logo {
+  position: absolute;
+  top: 20px;
+  left: 20px;
+  z-index: 3;
+  display: inline-flex;
+  color: inherit;
+  text-decoration: none;
 }
 
 .centered-prompt {
@@ -991,6 +1008,11 @@ a:focus-visible {
 @media (min-width: 640px) {
   .portfolio-spline-hero {
     min-height: 100vh;
+  }
+
+  .home-logo {
+    top: 32px;
+    left: 32px;
   }
 
   .portfolio-scroll-button {

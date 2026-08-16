@@ -188,6 +188,9 @@ export default function App() {
     <div className="app-shell">
       <main>
         <SplineHero>
+          <a className="home-logo" href="#top" aria-label="BrandPreflight home">
+            <BrandMark />
+          </a>
           <CenteredPrompt
             label={promptPresentation.label}
             prompt={promptPresentation.prompt}
