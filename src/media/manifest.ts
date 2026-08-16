@@ -8,6 +8,12 @@ import { reviewContextSchema, transcriptSegmentSchema, type ProcessingStatus, ty
 const ARTIFACT_ID = /^job-[a-zA-Z0-9_-]{6,64}$/;
 const MAX_MANIFEST_BYTES = 5_000_000;
 
+const frameReferenceSchema = z.object({
+  id: z.string().regex(/^frame-\d{4}$/),
+  timestampMs: z.number().int().min(0).max(7_200_000),
+  sha256: z.string().regex(/^[a-f0-9]{64}$/)
+}).strict();
+
 const unsignedManifestSchema = z
   .object({
     version: z.literal(1),
@@ -19,6 +25,7 @@ const unsignedManifestSchema = z
     transcriptStatus: z.enum(["complete", "failed"]),
     visualStatus: z.enum(["complete", "failed"]),
     frameDigest: z.string().regex(/^[a-f0-9]{64}$/),
+    frames: z.array(frameReferenceSchema).max(120).default([]),
     createdAt: z.string().datetime()
   })
   .strict();
@@ -80,7 +87,7 @@ const sign = (manifest: UnsignedManifest, key: Buffer): string =>
 export const writeArtifactManifest = async (
   dataRoot: string,
   artifactRoot: string,
-  input: Omit<UnsignedManifest, "version" | "createdAt">
+  input: Omit<UnsignedManifest, "version" | "createdAt" | "frames"> & { frames?: UnsignedManifest["frames"] }
 ): Promise<void> => {
   const root = await ensureDataRoot(dataRoot);
   const canonicalArtifact = await realpath(artifactRoot);
@@ -100,7 +107,7 @@ export const loadArtifactReview = async (
   artifactId: string,
   campaignId: string,
   campaignDigest: string
-): Promise<{ reviewContext: ReviewContext; processing: ProcessingStatus }> => {
+): Promise<{ reviewContext: ReviewContext; processing: ProcessingStatus; frameTimestamps: number[] }> => {
   if (!ARTIFACT_ID.test(artifactId)) throw new Error("Invalid artifact identifier");
   const root = await ensureDataRoot(dataRoot);
   const artifactRoot = resolve(root, artifactId);
@@ -125,6 +132,7 @@ export const loadArtifactReview = async (
       transcriptStatus: unsigned.transcriptStatus,
       visualStatus: unsigned.visualStatus,
       modelAnalysisStatus: "complete"
-    }
+    },
+    frameTimestamps: parsed.frames.map((frame) => frame.timestampMs)
   };
 };

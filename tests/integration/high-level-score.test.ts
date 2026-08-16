@@ -70,4 +70,58 @@ describe("high-level review scoring", () => {
       await reportServer.close();
     }
   });
+
+  it("binds visual findings to signed frame timestamps and retains concrete recommended changes", async () => {
+    const dataRoot = await mkdtemp(join(tmpdir(), "brandpreflight-visual-review-"));
+    const campaign = {
+      campaignId: "acme-visual",
+      name: "Acme visual",
+      requirements: [{
+        id: "logo",
+        category: "visual_branding" as const,
+        description: "Show the logo",
+        priority: "required" as const,
+        verification: "visual" as const,
+        polarity: "required" as const
+      }]
+    };
+    const artifactId = "job-visual01";
+    const artifactRoot = join(dataRoot, artifactId);
+    await mkdir(artifactRoot, { mode: 0o700 });
+    await writeArtifactManifest(dataRoot, artifactRoot, {
+      artifactId,
+      campaignId: campaign.campaignId,
+      campaignDigest: digestCampaign(campaign),
+      durationMs: 3_000,
+      transcript: [],
+      transcriptStatus: "failed",
+      visualStatus: "complete",
+      frameDigest: "0".repeat(64),
+      frames: [{ id: "frame-0001", timestampMs: 1_000, sha256: "0".repeat(64) }]
+    });
+    const session = await writeReviewSession(dataRoot, { campaign, artifactId });
+    const atRisk = await scoreReview(dataRoot, {
+      version: 1,
+      reviewId: session.reviewId,
+      findings: [{
+        requirementId: "logo", status: "at_risk", source: "visual", startMs: 900, endMs: 1_100,
+        evidence: "Logo is partly obscured.", confidence: 0.8, recommendedChange: "Move captions away from the logo."
+      }],
+      limitations: []
+    });
+    expect((await loadReport(dataRoot, atRisk.reportId)).report.requirements[0]).toMatchObject({
+      status: "at_risk", recommendedChange: "Move captions away from the logo."
+    });
+
+    const outsideFrame = await scoreReview(dataRoot, {
+      version: 1,
+      reviewId: session.reviewId,
+      findings: [{
+        requirementId: "logo", status: "satisfied", source: "visual", startMs: 2_000, endMs: 2_100,
+        evidence: "Unsupported visual claim.", confidence: 1
+      }],
+      limitations: []
+    });
+    expect((await loadReport(dataRoot, outsideFrame.reportId)).report.requirements[0]?.status).toBe("not_verifiable");
+  });
 });

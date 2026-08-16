@@ -92,8 +92,12 @@ export const writeReport = async (
     createdAt: new Date().toISOString()
   });
   const value = { ...unsigned, signature: sign(unsigned, await loadOrCreateKey(root)) };
+  const serialized = JSON.stringify(value, null, 2);
+  if (Buffer.byteLength(serialized, "utf8") > MAX_REPORT_BYTES) {
+    throw new Error("Report exceeds its size limit");
+  }
   const reportPath = join(canonicalDirectory, "report.json");
-  await writeFile(reportPath, JSON.stringify(value, null, 2), { encoding: "utf8", flag: "wx", mode: 0o600 });
+  await writeFile(reportPath, serialized, { encoding: "utf8", flag: "wx", mode: 0o600 });
   return { reportId, reportPath };
 };
 

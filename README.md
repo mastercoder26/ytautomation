@@ -25,7 +25,15 @@ npx --yes brandpreflight doctor
 
 ## Agent-first workflow
 
-Install the Codex plugin, attach the campaign PDF and finished video, then tell your agent:
+For Codex, install the npm package, add its bundled marketplace, then install the plugin:
+
+```bash
+npm install brandpreflight
+codex plugin marketplace add ./node_modules/brandpreflight/.agents/plugins
+codex plugin add brandpreflight@brandpreflight
+```
+
+Attach the campaign PDF and finished video, then tell your agent:
 
 > Use BrandPreflight to review this sponsored video against the attached campaign brief.
 

@@ -15,13 +15,31 @@ export const scoreReview = async (dataRoot: string, input: AgentFindings): Promi
 }> => {
   const findings = agentFindingsSchema.parse(input);
   const session = await loadReviewSession(dataRoot, findings.reviewId);
-  const { processing, reviewContext } = await loadArtifactReview(
+  const { processing, reviewContext, frameTimestamps } = await loadArtifactReview(
     dataRoot,
     session.artifactId,
     session.campaign.campaignId,
     digestCampaign(session.campaign)
   );
-  const report = calculateReadiness(session.campaign, toEvidence(findings.findings), processing, reviewContext);
+  const evidence = toEvidence(findings.findings).map((item) =>
+    item.source === "visual" && !frameTimestamps.some((timestamp) => timestamp >= item.startMs && timestamp <= item.endMs)
+      ? { ...item, status: "not_verifiable" as const }
+      : item
+  );
+  const calculated = calculateReadiness(session.campaign, evidence, processing, reviewContext);
+  const recommendedChanges = new Map(
+    findings.findings
+      .filter((finding) => finding.recommendedChange)
+      .map((finding) => [finding.requirementId, finding.recommendedChange] as const)
+  );
+  const report = {
+    ...calculated,
+    requirements: calculated.requirements.map((requirement) =>
+      (requirement.status === "missed" || requirement.status === "at_risk") && recommendedChanges.has(requirement.id)
+        ? { ...requirement, recommendedChange: recommendedChanges.get(requirement.id) }
+        : requirement
+    )
+  };
   const saved = await writeReport(dataRoot, {
     reviewId: session.reviewId,
     report,

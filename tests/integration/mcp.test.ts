@@ -8,6 +8,7 @@ import { digestCampaign } from "../../src/domain/campaign-binding.js";
 import { campaignInputSchema } from "../../src/domain/schemas.js";
 import { writeArtifactManifest } from "../../src/media/manifest.js";
 import { buildBrandPreflightServer } from "../../src/mcp/server.js";
+import { writeReviewSession } from "../../src/reviews/store.js";
 
 const closers: Array<() => Promise<void>> = [];
 
@@ -178,6 +179,30 @@ describe("BrandPreflight MCP", () => {
       }
     });
     expect(score.structuredContent).toMatchObject({ score: 100, verdict: "ready" });
+
+    const session = await writeReviewSession(dataRoot, { campaign: parsedCampaign, artifactId });
+    const highLevelScore = await client.callTool({
+      name: "brandpreflight_score",
+      arguments: {
+        version: 1,
+        reviewId: session.reviewId,
+        findings: [{
+          requirementId: "phrase",
+          source: "transcript",
+          status: "satisfied",
+          startMs: 0,
+          endMs: 500,
+          evidence: "hello",
+          confidence: 1
+        }],
+        limitations: []
+      }
+    });
+    expect(highLevelScore.structuredContent).toMatchObject({
+      reportId: expect.stringMatching(/^bp-/),
+      reportUrl: expect.stringMatching(/^http:\/\/127\.0\.0\.1:/),
+      score: 100
+    });
 
     const unrelated = await client.callTool({
       name: "brandpreflight_score",

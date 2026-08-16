@@ -163,7 +163,8 @@ const prepareVideoOnce = async (options: {
       transcript,
       transcriptStatus: hasWhisper ? "complete" : "failed",
       visualStatus: frames.length > 0 ? "complete" : "failed",
-      frameDigest: createHash("sha256").update(JSON.stringify(frames)).digest("hex")
+      frameDigest: createHash("sha256").update(JSON.stringify(frames)).digest("hex"),
+      frames: frames.map(({ id, timestampMs, sha256: digest }) => ({ id, timestampMs, sha256: digest }))
     });
 
     await Promise.all([
