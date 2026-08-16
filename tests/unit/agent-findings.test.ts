@@ -46,7 +46,7 @@ describe("BrandPreflight agent findings contract", () => {
       agentFindingsSchema.parse({
         version: 1,
         reviewId: "bp-review-8F3K",
-        findings: [{ ...finding, source: "captions" }],
+        findings: [{ ...finding, source: "audio" }],
         limitations: []
       })
     ).toThrow();
