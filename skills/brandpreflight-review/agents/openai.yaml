@@ -1,4 +1,0 @@
-interface:
-  display_name: "BrandPreflight"
-  short_description: "Review sponsored videos and save a signed local report"
-  default_prompt: "Use $brandpreflight to review this sponsored video against the attached campaign brief."

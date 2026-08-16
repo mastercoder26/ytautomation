@@ -1,123 +1,52 @@
 # BrandPreflight
 
-BrandPreflight checks sponsored videos before you send them to a brand.
+BrandPreflight is the scoring and report layer for sponsored-video reviews. Your agent uses the portable [`/watch`](https://github.com/bradautomates/claude-video) skill to understand the video, then BrandPreflight validates the evidence, calculates the score, and saves a signed report.
 
-You provide a campaign brief and a finished video. BrandPreflight turns the brief into checks, creates transcript and frame evidence, lets your AI model review the content, and calculates a local Campaign Readiness Score.
+## Start from the website
 
-```text
-brief → requirements → transcript + frames → AI review → score + fixes
+Open [brandpreflight.vercel.app](https://brandpreflight.vercel.app), copy the setup prompt, and paste it into your agent. It tells the agent to install these two GitHub skills:
+
+```bash
+npx skills add mastercoder26/ytautomation -g
+npx skills add bradautomates/claude-video -g
 ```
 
-## Install
+The first skill is BrandPreflight; the second is the maintained video-watching skill. There is no Codex plugin, marketplace entry, MCP registration, Docker image, or separate local video model to configure.
 
-The package is live on npm:
+Install the report CLI when the agent asks, or do it yourself:
 
 ```bash
 npm install -g brandpreflight
-brandpreflight doctor
 ```
 
-Or run it once with no global install:
+`/watch` manages its own first-use media prerequisites such as FFmpeg, captions, and optional transcription. Follow its prompts when it asks for permission to install a system dependency.
 
-```bash
-npx --yes brandpreflight doctor
-```
+## Review a sponsored video
 
-## Agent-first workflow
-
-For Codex, install the npm package, add its bundled marketplace, then install the plugin:
-
-```bash
-npm install brandpreflight
-codex plugin marketplace add ./node_modules/brandpreflight/.agents/plugins
-codex plugin add brandpreflight@brandpreflight
-```
-
-Attach the campaign PDF and finished video, then tell your agent:
+Attach a campaign PDF and finished video, then say:
 
 > Use BrandPreflight to review this sponsored video against the attached campaign brief.
 
-The skill calls `brandpreflight_review`, which extracts requirements, processes the video locally, and returns a private review ID plus the strict JSON shape for agent findings. The agent reviews transcript, frames, captions, disclosure, branding, and claims; it never supplies a score. `brandpreflight_score` validates those findings against the signed local evidence, calculates the score, and saves a signed browser report.
-
-The equivalent human/agent CLI flow is:
+The skill runs `/watch` for the video and uses this small CLI handoff internally:
 
 ```bash
 brandpreflight review --brief campaign.pdf --video sponsored-video.mp4
-# write the returned versioned findings JSON to findings.json
+# The agent writes its required findings JSON to findings.json.
 brandpreflight score --review bp-review-8F3K --input findings.json
 brandpreflight open bp-7XQ4M2
 ```
 
-No user-authored `campaign.json`, artifact ID, approval-token file, or review-context JSON is required. Legacy low-level commands remain available for integrations that already use them.
+The agent supplies observations only. BrandPreflight rejects invalid findings, calculates the deterministic 0–100 score itself, and saves a signed report. You never need to create campaign JSON, artifact IDs, approval-token files, or review-context JSON.
 
-## MCP setup
+## What it checks
 
-Use BrandPreflight from Codex or another MCP host without installing it globally:
+- Campaign requirements extracted from the brief
+- Transcript, captions, frames, branding, disclosures, claims, and calls to action observed by `/watch`
+- Versioned evidence with requirement IDs, timestamps, sources, and confidence
+- Required-item failures and practical recommended edits
+- A browser report with the final score, verdict, and limitations
 
-```toml
-[mcp_servers.brandpreflight]
-command = "npx"
-args = ["--yes", "--package", "brandpreflight", "brandpreflight-mcp"]
-env = {
-  BRANDPREFLIGHT_WORKSPACE_ROOT = "/absolute/path/containing/briefs-and-videos",
-  BRANDPREFLIGHT_DATA_DIR = "/absolute/private/brandpreflight-artifacts",
-  BRANDPREFLIGHT_MEDIA_RUNTIME = "docker",
-  BRANDPREFLIGHT_MEDIA_IMAGE = "sha256:<immutable-image-id>"
-}
-```
-
-The MCP server provides:
-
-- `brandpreflight_doctor` — check local tools;
-- `brandpreflight_review` — start a review directly from a brief and video;
-- `brandpreflight_score` — validate strict findings, calculate a score, and save a signed report;
-- legacy extraction, preparation, packet, and score tools for existing integrations.
-
-The bundled agent skill is included in the npm package:
-
-```bash
-brandpreflight skill
-```
-
-## Media setup
-
-Secure video and PDF processing requires Docker or Podman. Build the pinned image from the repository:
-
-```bash
-docker build -f containers/media/Dockerfile -t brandpreflight-media:local .
-docker image inspect --format '{{.Id}}' brandpreflight-media:local
-
-export BRANDPREFLIGHT_MEDIA_RUNTIME=docker
-export BRANDPREFLIGHT_MEDIA_IMAGE=sha256:<image-id-from-inspect>
-```
-
-For local transcription, also configure whisper.cpp in the image:
-
-```bash
-export BRANDPREFLIGHT_WHISPER_COMMAND=whisper-cli
-export BRANDPREFLIGHT_WHISPER_MODEL=/absolute/path/to/ggml-base.en.bin
-```
-
-Without whisper.cpp, BrandPreflight can still inspect frames but will mark transcript checks incomplete.
-
-If the agent host offers the separate `/watch` skill, it can help with an ambiguous focused timestamp. BrandPreflight detects and documents readiness through `doctor`; it never silently installs FFmpeg, yt-dlp, or another agent host's skill. Those setup actions affect the local machine and must be explicitly authorized.
-
-## Safety and privacy
-
-- Briefs, videos, transcripts, frames, and reports stay local by default.
-- Native tools run in an offline, resource-limited container.
-- The data directory must be outside the model-accessible workspace.
-- Artifact manifests, review sessions, and final reports are signed locally.
-- Evidence timestamps, sources, excerpts, and campaign requirements are validated.
-- Incomplete processing produces an inconclusive or limited result instead of a false “ready.”
-
-## JavaScript API
-
-Use the deterministic core from JavaScript or TypeScript:
-
-```js
-import { calculateReadiness, digestCampaign } from "brandpreflight/core";
-```
+Raw media stays with the agent and `/watch` unless you explicitly choose otherwise. BrandPreflight stores only the local review session and signed report needed for scoring.
 
 ## Development
 
@@ -126,15 +55,5 @@ npm install
 npm run check
 npm run package:check
 ```
-
-Run the real container smoke test on a machine with Docker or Podman:
-
-```bash
-npm run test:container
-```
-
-## Current scope
-
-BrandPreflight is the local processing, scoring, skill, and MCP foundation. It does not yet include a hosted dashboard, accounts, billing, or a built-in AI provider. You bring the model; BrandPreflight provides the specialized video pipeline and sponsored-content review workflow.
 
 MIT License.

@@ -1,8 +1,8 @@
 const prompts = {
-  Codex: "Read the BrandPreflight setup skill at {skillUrl} and follow it to install and configure BrandPreflight for this project. Then tell me when it is ready to review a sponsored video.",
-  "Claude Code": "Read the BrandPreflight setup skill at {skillUrl} and follow it to install and configure the BrandPreflight MCP workflow for this project. Then tell me when it is ready to review a sponsored video.",
-  Cursor: "Read the BrandPreflight setup skill at {skillUrl} and set up its MCP server for this workspace. Then tell me when BrandPreflight is ready to review a sponsored video.",
-  "Any MCP agent": "Read the BrandPreflight setup skill at {skillUrl} and configure its MCP server for this workspace. Then confirm it is ready to review a sponsored video."
+  Codex: "Install the BrandPreflight skill from https://github.com/mastercoder26/ytautomation and the video-watching skill from https://github.com/bradautomates/claude-video. Then read {skillUrl}, follow it, and tell me when you are ready to review a sponsored video.",
+  "Claude Code": "Install the BrandPreflight skill from https://github.com/mastercoder26/ytautomation and the video-watching skill from https://github.com/bradautomates/claude-video. Then read {skillUrl}, follow it, and tell me when you are ready to review a sponsored video.",
+  Cursor: "Install the BrandPreflight skill from https://github.com/mastercoder26/ytautomation and the video-watching skill from https://github.com/bradautomates/claude-video. Then read {skillUrl}, follow it, and tell me when you are ready to review a sponsored video.",
+  "Other agent": "Install the BrandPreflight skill from https://github.com/mastercoder26/ytautomation and the video-watching skill from https://github.com/bradautomates/claude-video. Then read {skillUrl}, follow it, and tell me when you are ready to review a sponsored video."
 };
 let selectedAgent = "Codex";
 const skillUrl = `${window.location.origin}/skill.md`;

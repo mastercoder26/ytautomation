@@ -27,6 +27,25 @@ describe("BrandPreflight CLI", () => {
     });
   });
 
+  it("starts a watch-first review without preparing video media itself", async () => {
+    const root = await mkdtemp(join(tmpdir(), "brandpreflight-cli-review-"));
+    const briefPath = join(root, "brief.txt");
+    const videoPath = join(root, "sponsored-video.mp4");
+    await writeFile(briefPath, "- Clearly disclose that the video is sponsored by Acme");
+    const output: string[] = [];
+    const exitCode = await runCli(["review", "--brief", briefPath, "--video", videoPath, "--data-dir", join(root, "data")], {
+      stdout: (value) => output.push(value),
+      stderr: () => undefined
+    });
+
+    expect(exitCode).toBe(0);
+    expect(JSON.parse(output.join(""))).toMatchObject({
+      reviewId: expect.stringMatching(/^bp-review-/),
+      watchCommand: `/watch ${videoPath}`,
+      findingsContract: { version: 1, findings: [], limitations: [] }
+    });
+  });
+
   it("scores a structured assessment from a local JSON file", async () => {
     const root = await mkdtemp(join(tmpdir(), "brandpreflight-cli-"));
     const input = join(root, "assessment.json");

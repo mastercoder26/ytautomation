@@ -1,18 +1,14 @@
 {
   "name": "brandpreflight",
-  "version": "0.1.2",
-  "description": "Local-first sponsored-content campaign QA skill, CLI, and MCP server.",
+  "version": "0.2.0",
+  "description": "Deterministic scoring and signed reports for agent-led sponsored-video reviews.",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "files": [
     "dist",
-    ".agents/plugins/marketplace.json",
-    ".codex-plugin/plugin.json",
-    ".mcp.json",
     "skills/brandpreflight-review",
     "ui/report-viewer",
-    "containers/media/Dockerfile",
     "README.md",
     "LICENSE"
   ],
@@ -31,8 +27,7 @@
     "node": ">=20"
   },
   "bin": {
-    "brandpreflight": "dist/cli.js",
-    "brandpreflight-mcp": "dist/mcp/index.js"
+    "brandpreflight": "dist/cli.js"
   },
   "repository": {
     "type": "git",
@@ -45,7 +40,6 @@
   "keywords": [
     "brand-safety",
     "creator-economy",
-    "mcp",
     "sponsored-content",
     "video-qa",
     "cli",
@@ -63,17 +57,16 @@
     "test:coverage": "vitest run --coverage",
     "package:check": "npm pack --dry-run",
     "prepublishOnly": "npm run build",
-    "start:mcp": "tsx src/mcp/index.ts",
     "cli": "tsx src/cli.ts",
     "check": "npm run typecheck && npm run test:coverage && npm run build"
   },
   "dependencies": {
-    "@modelcontextprotocol/server": "2.0.0",
     "pdf-parse": "2.4.5",
     "zod": "4.4.3"
   },
   "devDependencies": {
     "@modelcontextprotocol/client": "2.0.0",
+    "@modelcontextprotocol/server": "2.0.0",
     "@types/node": "24.10.1",
     "@vitest/coverage-v8": "4.1.0",
     "fast-check": "4.3.0",

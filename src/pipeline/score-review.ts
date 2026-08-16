@@ -15,18 +15,29 @@ export const scoreReview = async (dataRoot: string, input: AgentFindings): Promi
 }> => {
   const findings = agentFindingsSchema.parse(input);
   const session = await loadReviewSession(dataRoot, findings.reviewId);
-  const { processing, reviewContext, frameTimestamps } = await loadArtifactReview(
-    dataRoot,
-    session.artifactId,
-    session.campaign.campaignId,
-    digestCampaign(session.campaign)
-  );
+  const prepared = session.artifactId
+    ? await loadArtifactReview(
+        dataRoot,
+        session.artifactId,
+        session.campaign.campaignId,
+        digestCampaign(session.campaign)
+      )
+    : undefined;
   const evidence = toEvidence(findings.findings).map((item) =>
-    item.source === "visual" && !frameTimestamps.some((timestamp) => timestamp >= item.startMs && timestamp <= item.endMs)
+    prepared && item.source === "visual" && !prepared.frameTimestamps.some((timestamp) => timestamp >= item.startMs && timestamp <= item.endMs)
       ? { ...item, status: "not_verifiable" as const }
       : item
   );
-  const calculated = calculateReadiness(session.campaign, evidence, processing, reviewContext);
+  const calculated = calculateReadiness(
+    session.campaign,
+    evidence,
+    prepared?.processing ?? {
+      transcriptStatus: "complete",
+      visualStatus: "complete",
+      modelAnalysisStatus: "complete"
+    },
+    prepared?.reviewContext
+  );
   const recommendedChanges = new Map(
     findings.findings
       .filter((finding) => finding.recommendedChange)

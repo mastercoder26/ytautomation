@@ -26,11 +26,14 @@ const buildMinimalPdf = (text: string): Buffer => {
   return Buffer.from(body, "latin1");
 };
 
-describe("restricted PDF worker", () => {
-  it("fails closed when no pinned resource-limited container is configured", async () => {
+describe("local PDF extraction", () => {
+  it("extracts a local PDF without requiring Docker", async () => {
     const root = await mkdtemp(join(tmpdir(), "brandpreflight-pdf-worker-"));
     const path = join(root, "brief.pdf");
     await writeFile(path, buildMinimalPdf("Sponsored by Acme"));
-    await expect(extractPdfText(path, [root])).rejects.toThrow("pinned Docker/Podman");
+    await expect(extractPdfText(path, [root])).resolves.toMatchObject({
+      text: expect.stringContaining("Sponsored by Acme"),
+      pages: 1
+    });
   });
 });

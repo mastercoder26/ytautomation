@@ -1,3 +1,4 @@
+import { PDFParse } from "pdf-parse";
 import { buildPdfContainerInvocation, type MediaContainerConfig } from "../media/container.js";
 import { readImportedFile } from "../media/file-policy.js";
 import { runProcess } from "../media/process.js";
@@ -7,6 +8,16 @@ export type PdfTextParser = (data: Uint8Array) => Promise<PdfTextResult>;
 
 const MAX_PAGES = 500;
 const MAX_TEXT_BYTES = 2_000_000;
+
+const localParser: PdfTextParser = async (data) => {
+  const parser = new PDFParse({ data: Buffer.from(data) });
+  try {
+    const result = await parser.getText();
+    return { text: result.text, pages: result.total };
+  } finally {
+    await parser.destroy();
+  }
+};
 
 const containerParser = async (
   data: Uint8Array,
@@ -40,10 +51,8 @@ export const extractPdfText = async (
   const { data } = await readImportedFile(pdfPath, allowedRoots, "pdf");
   if (data.subarray(0, 5).toString("ascii") !== "%PDF-") throw new Error("File is not a valid PDF");
 
-  if (!parser && !mediaContainer) {
-    throw new Error("PDF extraction requires a pinned Docker/Podman sandbox image");
-  }
-  const result = await (parser ?? ((input) => containerParser(input, mediaContainer as MediaContainerConfig)))(data);
+  const selectedParser = parser ?? (mediaContainer ? (input: Uint8Array) => containerParser(input, mediaContainer) : localParser);
+  const result = await selectedParser(data);
   if (!Number.isInteger(result.pages) || result.pages < 1 || result.pages > MAX_PAGES) {
     throw new Error(`PDF page limit exceeded (maximum ${MAX_PAGES})`);
   }

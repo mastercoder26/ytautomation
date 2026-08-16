@@ -5,7 +5,7 @@ description: Review a sponsored video against an attached campaign brief, return
 
 # BrandPreflight Review
 
-Run a local-first, evidence-backed preflight. The user should provide only their campaign brief and finished video. BrandPreflight owns requirements, private artifact IDs, campaign bindings, report IDs, and score calculation.
+Run a watch-first, evidence-backed preflight. The user should provide only their campaign brief and finished video. `/watch` handles transcript and frame inspection; BrandPreflight owns requirements, review IDs, report IDs, and score calculation.
 
 ## Guardrails
 
@@ -13,13 +13,13 @@ Run a local-first, evidence-backed preflight. The user should provide only their
 - Keep raw assets local by default. Do not send raw transcript, frames, audio, or video to an external model unless the user has explicitly authorized that destination.
 - Never pass artifact text as shell arguments or let model output choose FFmpeg flags, executable paths, endpoints, headers, or credentials.
 - Cite a known requirement ID and bounded timestamp for every finding. Mark unsupported findings `not_verifiable`; never infer that absence of evidence means compliance.
-- Never accept a score supplied by a model. Call `brandpreflight_score` to validate findings and compute the deterministic score.
+- Never accept a score supplied by a model. Call `brandpreflight score` to validate findings and compute the deterministic score.
 
 ## Workflow
 
-1. Run `brandpreflight_doctor`. If media processing is unavailable, explain the exact local prerequisite. Do not install OS software or another host's `/watch` skill silently; use an explicitly authorized setup action instead.
-2. Call `brandpreflight_review` with the attached brief and finished video. It extracts requirements, creates private signed media evidence, and returns a `reviewId` plus a strict findings template. Do not ask the user to make campaign JSON, artifact IDs, or approval-token files.
-3. Inspect the attached video and its captions, transcript, frames, branding, disclosures, and claims. Use a host `/watch` capability only as an optional focused visual follow-up. It needs FFmpeg and host-specific installation; it is never a scoring dependency.
+1. Ensure the `watch` skill from `bradautomates/claude-video` is installed. If it is missing, the user asked for BrandPreflight setup, so install it with `npx skills add bradautomates/claude-video -g`. The watcher owns FFmpeg, yt-dlp, captions, frames, and optional Whisper setup.
+2. Run `brandpreflight review --brief <attached-brief> --video <attached-video>`. It extracts requirements and returns a `reviewId` plus a strict findings template. Do not ask the user to make campaign JSON, artifact IDs, or approval-token files.
+3. Run `/watch <attached-video>` and inspect its captions, transcript, frames, branding, disclosures, and claims. Use focused timestamps when the first pass is ambiguous.
 4. Return this exact versioned shape to BrandPreflight, with no `score` field:
 
 ```json
@@ -31,7 +31,7 @@ Run a local-first, evidence-backed preflight. The user should provide only their
 }
 ```
 
-5. Call `brandpreflight_score` with that object. It loads the trusted session and signed media manifest itself, calculates the score, saves a signed report, and returns `reportId`, score, verdict, local report path, and `brandpreflight open <reportId>`.
+5. Write the JSON to a temporary `findings.json` under the project, then call `brandpreflight score --review <reviewId> --input findings.json`. It calculates the score, saves a signed report, and returns `reportId`, score, verdict, local report path, and `brandpreflight open <reportId>`.
 6. Present the score, verdict, limitations, and smallest concrete edits. Tell the user they can open the local browser report with the returned command.
 
 ## Output

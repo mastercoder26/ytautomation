@@ -157,7 +157,6 @@ export const runCli = async (argv: readonly string[], io: CliIo = defaultIo): Pr
       const briefPath = resolve(requireFlag(flags, "brief"));
       const videoPath = resolve(requireFlag(flags, "video"));
       const root = resolve(flags.get("root") ?? dirname(briefPath));
-      const dataRoot = resolve(flags.get("data-dir") ?? defaultDataRoot());
       const campaignId = flags.get("campaign-id") ?? `campaign-${Date.now().toString(36)}`;
       const name = flags.get("name") ?? basename(briefPath, extname(briefPath));
       const briefText = extname(briefPath).toLowerCase() === ".pdf"
@@ -168,20 +167,7 @@ export const runCli = async (argv: readonly string[], io: CliIo = defaultIo): Pr
         name,
         requirements: extractRequirementCandidates(briefText)
       });
-      const mediaContainer = configuredMediaContainer();
-      const prepared = await prepareVideo({
-        videoPath,
-        campaignId: campaign.campaignId,
-        campaignDigest: digestCampaign(campaign),
-        allowedRoots: [root],
-        dataRoot,
-        ...(process.env.BRANDPREFLIGHT_FFMPEG ? { ffmpegCommand: process.env.BRANDPREFLIGHT_FFMPEG } : {}),
-        ...(process.env.BRANDPREFLIGHT_FFPROBE ? { ffprobeCommand: process.env.BRANDPREFLIGHT_FFPROBE } : {}),
-        ...(process.env.BRANDPREFLIGHT_WHISPER_COMMAND ? { whisperCommand: process.env.BRANDPREFLIGHT_WHISPER_COMMAND } : {}),
-        ...(process.env.BRANDPREFLIGHT_WHISPER_MODEL ? { whisperModelPath: process.env.BRANDPREFLIGHT_WHISPER_MODEL } : {}),
-        ...(mediaContainer ? { mediaContainer } : {})
-      });
-      const session = await writeReviewSession(dataRoot, { campaign, artifactId: prepared.artifactDirectory });
+      const session = await writeReviewSession(resolve(flags.get("data-dir") ?? defaultDataRoot()), { campaign });
       printJson(io, {
         reviewId: session.reviewId,
         requirements: campaign.requirements,
@@ -191,7 +177,8 @@ export const runCli = async (argv: readonly string[], io: CliIo = defaultIo): Pr
           findings: [],
           limitations: []
         },
-        limitations: prepared.limitations
+        watchCommand: `/watch ${videoPath}`,
+        limitations: []
       });
       return 0;
     }

@@ -12,7 +12,7 @@ const unsignedSessionSchema = z.object({
   version: z.literal(1),
   reviewId: reviewIdSchema,
   campaign: campaignInputSchema,
-  artifactId: z.string().regex(/^job-[a-zA-Z0-9_-]{6,64}$/),
+  artifactId: z.string().regex(/^job-[a-zA-Z0-9_-]{6,64}$/).optional(),
   createdAt: z.string().datetime()
 }).strict();
 const signedSessionSchema = unsignedSessionSchema.extend({ signature: z.string().regex(/^[a-f0-9]{64}$/) }).strict();
@@ -66,7 +66,7 @@ const newReviewId = (): string => `bp-review-${randomBytes(5).toString("hex").to
 
 export const writeReviewSession = async (
   dataRoot: string,
-  input: { campaign: CampaignInput; artifactId: string }
+  input: { campaign: CampaignInput; artifactId?: string }
 ): Promise<ReviewSession> => {
   const root = await ensureRoot(dataRoot);
   const reviewId = newReviewId();
