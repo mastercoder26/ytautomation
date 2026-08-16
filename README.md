@@ -1,158 +1,107 @@
 # BrandPreflight
 
-BrandPreflight helps creators check sponsored videos before sending them to a brand.
+BrandPreflight checks sponsored videos before you send them to a brand.
 
-You give it:
-
-- a campaign brief as text or PDF;
-- a finished video;
-- the AI model you want to use for the review.
-
-It gives you a Campaign Readiness Score, timestamped evidence, and a short list of edits to make before submission.
+You provide a campaign brief and a finished video. BrandPreflight turns the brief into checks, creates transcript and frame evidence, lets your AI model review the content, and calculates a local Campaign Readiness Score.
 
 ```text
-campaign brief → structured requirements → transcript + frames → AI review → validated score
+brief → requirements → transcript + frames → AI review → score + fixes
 ```
-
-## What it checks
-
-BrandPreflight can check requirements such as:
-
-- required talking points and exact phrases;
-- disclosures such as `#ad`;
-- promo codes and calls to action;
-- prohibited claims or competitor mentions;
-- logos, product placement, captions, branding, and editing issues;
-- anything else you describe as a campaign requirement.
-
-The AI model proposes findings. BrandPreflight validates the evidence and calculates the score locally, so a model cannot simply claim that a video is ready.
 
 ## Install
 
-The package is prepared for npm distribution and includes both commands:
+The package is live on npm:
 
 ```bash
 npm install -g brandpreflight
 brandpreflight doctor
 ```
 
-For a one-off run:
+Or run it once with no global install:
 
 ```bash
 npx --yes brandpreflight doctor
 ```
 
-The npm release workflow is in `.github/workflows/publish.yml`. Until the first registry release, use the local setup below.
+## What you can do
 
-## Local setup
+### Check a campaign brief
 
-Requirements:
-
-- Node.js 20 or newer;
-- Docker or Podman for secure media and PDF processing;
-- FFmpeg and ffprobe inside the pinned media image;
-- whisper.cpp is optional but required for a local transcript.
-
-From this repository:
+Use a PDF or a text file. BrandPreflight extracts requirements such as exact phrases, disclosures, promo codes, calls to action, prohibited claims, branding, captions, and editing rules.
 
 ```bash
-npm install
-npm run build
-node dist/cli.js doctor
-```
-
-Build the media image and pin its immutable image ID:
-
-```bash
-docker build -f containers/media/Dockerfile -t brandpreflight-media:local .
-docker image inspect --format '{{.Id}}' brandpreflight-media:local
-
-export BRANDPREFLIGHT_MEDIA_RUNTIME=docker
-export BRANDPREFLIGHT_MEDIA_IMAGE=sha256:<image-id-from-inspect>
-```
-
-Add these optional variables if whisper.cpp is installed in your image:
-
-```bash
-export BRANDPREFLIGHT_WHISPER_COMMAND=whisper-cli
-export BRANDPREFLIGHT_WHISPER_MODEL=/absolute/path/to/ggml-base.en.bin
-```
-
-## The simple CLI workflow
-
-### 1. Turn the brief into requirements
-
-For a PDF:
-
-```bash
-node dist/cli.js brief \
+brandpreflight brief \
   --pdf campaign.pdf \
   --campaign-id acme-launch \
   --name "Acme Launch" \
   --root . > campaign.json
 ```
 
-For a typed brief saved as a text file, use `--text brief.txt` instead of `--pdf campaign.pdf`.
+For a text brief, replace `--pdf campaign.pdf` with `--text brief.txt`.
 
-Open `campaign.json` and fix any ambiguous requirement before reviewing the video. Each requirement specifies what to check and whether it is transcript, visual, both, or manual.
+Always open `campaign.json` and fix anything ambiguous before continuing.
 
-### 2. Prepare the video
+### Analyze a finished video locally
 
 ```bash
-node dist/cli.js prepare \
+brandpreflight prepare \
   --campaign campaign.json \
   --video creator-video.mp4 \
   --root . \
   --data-dir /absolute/private/brandpreflight-artifacts
 ```
 
-This creates a local artifact containing:
+The local media pipeline creates:
 
-- video metadata;
-- bounded audio and frame evidence;
-- a timestamped transcript when whisper.cpp is configured;
-- a signed manifest bound to the exact campaign requirements.
+- video metadata and duration;
+- bounded audio and video frames through FFmpeg;
+- a timestamped whisper.cpp transcript when configured;
+- a signed artifact manifest tied to the exact campaign.
 
-### 3. Approve transcript sharing
+### Use your own AI model
 
-Approval is explicit and happens outside the AI host:
+BrandPreflight does not require a hosted AI provider. Your chosen model reviews the transcript and visual observations; BrandPreflight supplies the review packet and validates the answer.
+
+Before transcript evidence is shared, approve it explicitly:
 
 ```bash
-node dist/cli.js approve \
+brandpreflight approve \
   --campaign campaign.json \
   --root . \
   --data-dir /absolute/private/brandpreflight-artifacts
 ```
 
-The approval token is one-time and campaign-specific. Raw transcript and frame paths are not exposed before approval.
+The approval is one-time and campaign-specific. The AI model cannot approve its own access or invent the final score.
 
-### 4. Review with your chosen AI model
+### Inspect visual issues
 
-The MCP workflow is recommended for this step. The server builds a review packet from the signed local artifact, and your model analyzes:
+Use the extracted frames first. If your agent host supports `/watch`, use it to inspect an exact timestamp for issues like:
 
-- transcript requirements;
-- visual observations;
-- exact phrases and disclosures;
-- risks and recommended changes.
+- missing or incorrect branding;
+- competitor products;
+- disclosure placement;
+- caption problems;
+- editing mistakes;
+- visual claims that are not supported.
 
-Use the extracted frames first. If your agent host provides `/watch`, use it to inspect an exact timestamp when a visual finding needs more context. `/watch` is optional; it is not required by the local runtime.
+`/watch` is optional. It is not required by the local runtime.
 
-The model returns findings. It does not control the final score.
+### Get a readiness score
 
-### 5. Calculate the score
+The final result includes:
 
-BrandPreflight validates every finding against the local artifact and returns:
-
-- a score from 0 to 100;
+- a score from 0–100;
 - `ready`, `needs_changes`, `blocked`, or `inconclusive`;
-- satisfied and missed requirements;
+- satisfied, missed, and at-risk requirements;
 - timestamped evidence;
-- concrete changes before submission;
-- limitations for any unreviewed media.
+- specific changes to make before submission;
+- limitations for anything that was not fully reviewed.
+
+The score is calculated locally. A model cannot simply return “ready.”
 
 ## MCP setup
 
-The MCP server works with Codex or another MCP host. Without a global install:
+Use BrandPreflight from Codex or another MCP host without installing it globally:
 
 ```toml
 [mcp_servers.brandpreflight]
@@ -166,50 +115,67 @@ env = {
 }
 ```
 
-The server exposes:
+The MCP server provides:
 
-- `brandpreflight_doctor` — check local prerequisites;
-- `brandpreflight_extract_requirements` — parse typed or PDF briefs;
+- `brandpreflight_doctor` — check local tools;
+- `brandpreflight_extract_requirements` — parse a brief;
 - `brandpreflight_prepare_video` — create signed local evidence;
-- `brandpreflight_build_review_packet` — build the model-facing packet after approval;
-- `brandpreflight_score` — validate findings and calculate the readiness score.
+- `brandpreflight_build_review_packet` — build the AI review packet after approval;
+- `brandpreflight_score` — validate findings and calculate the score.
 
-The bundled agent skill is available from the installed package with:
+The bundled agent skill is included in the npm package:
 
 ```bash
 brandpreflight skill
 ```
 
-It prints the path to `brandpreflight-review/SKILL.md`.
+## Media setup
 
-## Privacy and safety
+Secure video and PDF processing requires Docker or Podman. Build the pinned image from the repository:
+
+```bash
+docker build -f containers/media/Dockerfile -t brandpreflight-media:local .
+docker image inspect --format '{{.Id}}' brandpreflight-media:local
+
+export BRANDPREFLIGHT_MEDIA_RUNTIME=docker
+export BRANDPREFLIGHT_MEDIA_IMAGE=sha256:<image-id-from-inspect>
+```
+
+For local transcription, also configure whisper.cpp in the image:
+
+```bash
+export BRANDPREFLIGHT_WHISPER_COMMAND=whisper-cli
+export BRANDPREFLIGHT_WHISPER_MODEL=/absolute/path/to/ggml-base.en.bin
+```
+
+Without whisper.cpp, BrandPreflight can still inspect frames but will mark transcript checks incomplete.
+
+## Safety and privacy
 
 - Briefs, videos, transcripts, frames, and reports stay local by default.
-- Native media tools run in a pinned, offline, resource-limited container.
+- Native tools run in an offline, resource-limited container.
 - The data directory must be outside the model-accessible workspace.
-- Approval tokens and artifact manifests are signed locally.
-- Evidence timestamps, sources, excerpts, and campaign digests are validated.
-- The model cannot provide its own score or replace the trusted review context.
-- If transcription or visual processing fails, the result is marked incomplete instead of silently treated as ready.
+- Artifact manifests and approvals are signed locally.
+- Evidence timestamps, sources, excerpts, and campaign requirements are validated.
+- Incomplete processing produces an inconclusive or limited result instead of a false “ready.”
 
 ## JavaScript API
 
-The package exposes the deterministic core at `brandpreflight/core`:
+Use the deterministic core from JavaScript or TypeScript:
 
 ```js
 import { calculateReadiness, digestCampaign } from "brandpreflight/core";
 ```
 
-Use this for integrations that want the campaign schemas, campaign binding, evidence validation, envelope construction, or local scoring without calling the CLI.
-
 ## Development
 
 ```bash
+npm install
 npm run check
 npm run package:check
 ```
 
-The test suite covers the core scorer, media adapters, MCP server, CLI, consent flow, provenance checks, and security boundaries. The real container smoke test is available when Docker or Podman is installed:
+Run the real container smoke test on a machine with Docker or Podman:
 
 ```bash
 npm run test:container
@@ -217,10 +183,6 @@ npm run test:container
 
 ## Current scope
 
-BrandPreflight is the local processing and review foundation. It does not yet include a hosted dashboard, accounts, billing, or a built-in AI provider. You bring the model; BrandPreflight supplies the specialized video pipeline, evidence contract, scoring system, MCP tools, and sponsored-content workflow.
+BrandPreflight is the local processing, scoring, skill, and MCP foundation. It does not yet include a hosted dashboard, accounts, billing, or a built-in AI provider. You bring the model; BrandPreflight provides the specialized video pipeline and sponsored-content review workflow.
 
-See [the architecture notes](docs/architecture.md), [the scoring contract](docs/scoring.md), and [the MCP reference](docs/mcp.md) for implementation details.
-
-## License
-
-MIT
+MIT License.
