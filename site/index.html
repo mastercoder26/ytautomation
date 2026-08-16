@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Set up an agent to preflight sponsored videos with BrandPreflight.">
+    <title>BrandPreflight — sponsored video, checked before it ships</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <header class="nav shell">
+      <a class="wordmark" href="/">brand<span>preflight</span></a>
+      <nav aria-label="Primary navigation"><a href="#setup">Setup</a><a href="#workflow">Workflow</a><a href="https://github.com/mastercoder26/ytautomation">GitHub</a></nav>
+      <a class="nav-action" href="#setup">Set up my agent <span>↗</span></a>
+    </header>
+
+    <main>
+      <section class="hero shell">
+        <div class="eyebrow"><i></i> agent-ready sponsored-content QA</div>
+        <h1>Ship the video.<br><em>Not the surprises.</em></h1>
+        <p class="lede">BrandPreflight turns a campaign brief and finished video into a signed, timestamped readiness report—through the agent you already use.</p>
+        <div class="hero-actions"><a class="button primary" href="#setup">Set up BrandPreflight <span>→</span></a><a class="button quiet" href="#workflow">See how it works ↓</a></div>
+        <div class="terminal hero-terminal"><div class="terminal-bar"><b></b><b></b><b></b><span>your coding agent</span></div><code><small>you</small> Use BrandPreflight to review this sponsored video against the attached campaign brief.<br><br><small>agent</small> <strong>✓</strong> 92 / ready &nbsp; · &nbsp; signed report saved</code></div>
+        <p class="reassurance">Local-first evidence &nbsp;·&nbsp; deterministic scoring &nbsp;·&nbsp; signed reports</p>
+      </section>
+
+      <section class="setup shell" id="setup">
+        <div class="section-kicker">01 — one prompt, one setup</div>
+        <h2>Choose your agent.<br>Copy one line.</h2>
+        <p>It reads the hosted skill, installs the right local pieces, and leaves your agent ready to review a brief and a video.</p>
+        <div class="agent-tabs" role="tablist" aria-label="Agent setup instructions">
+          <button class="active" data-agent="Codex" role="tab" aria-selected="true">Codex</button><button data-agent="Claude Code" role="tab">Claude Code</button><button data-agent="Cursor" role="tab">Cursor</button><button data-agent="Any MCP agent" role="tab">Any MCP agent</button>
+        </div>
+        <div class="copy-card"><div><span class="copy-label">Paste this into <b id="agent-name">Codex</b></span><pre id="setup-prompt">Read the BrandPreflight setup skill at this site’s /skill.md URL and follow it to install and configure BrandPreflight for this project. Then tell me when it is ready to review a sponsored video.</pre></div><button class="copy-button" id="copy-setup">Copy setup prompt <span>⧉</span></button></div>
+        <p class="hint" id="setup-hint">The skill configures the Codex plugin, MCP server, and local media prerequisites.</p>
+      </section>
+
+      <section class="workflow shell" id="workflow">
+        <div class="section-kicker">02 — the review, without the plumbing</div>
+        <h2>Two attachments.<br>One useful answer.</h2>
+        <div class="steps">
+          <article><span>1</span><h3>Attach the brief + video</h3><p>The creator gives their agent a campaign PDF and finished sponsored video.</p></article>
+          <article><span>2</span><h3>Ask for BrandPreflight</h3><p>The skill extracts requirements, checks media evidence, and requests strict findings.</p></article>
+          <article><span>3</span><h3>Open the signed report</h3><p>Get a deterministic score, concrete edits, and a browser report with timestamps.</p></article>
+        </div>
+      </section>
+
+      <section class="report-section">
+        <div class="shell report-layout"><div><div class="section-kicker">What the agent cannot fake</div><h2>The model brings observations.<br>BrandPreflight brings the verdict.</h2><p>Findings are bound to known requirements, reviewed duration, signed manifests, and extracted frame timestamps. The model never supplies the score.</p><a class="text-link" href="/skill.md">Read the hosted skill <span>→</span></a></div><div class="report-card"><div class="report-top"><span>Campaign readiness</span><b>signed</b></div><strong>92</strong><span class="ready">Ready</span><hr><div class="report-row"><span>Disclosure</span><b>✓ 00:01</b></div><div class="report-row"><span>Logo visibility</span><b class="risk">! revise 00:12</b></div><div class="report-row"><span>Promo code</span><b>✓ 00:37</b></div></div></div>
+      </section>
+
+      <section class="features shell"><div class="section-kicker">Built for the hand-off</div><h2>Everything a brand review needs.<br>Nothing a creator has to assemble.</h2><div class="feature-grid"><article><b>01</b><h3>Brief extraction</h3><p>Exact phrases, disclosures, claims, promo codes, calls to action, captions, and visual requirements.</p></article><article><b>02</b><h3>Evidence-bound scoring</h3><p>Strict JSON, trusted duration checks, signed artifacts, and deterministic 0–100 readiness scoring.</p></article><article><b>03</b><h3>Human results screen</h3><p>A clean local report with requirements, timestamps, limitations, and the next edit to make.</p></article><article><b>04</b><h3>Works where agents work</h3><p>Codex plugin first, generic MCP server included, with copyable setup for other agent hosts.</p></article></div></section>
+
+      <section class="final shell"><div class="terminal"><div class="terminal-bar"><b></b><b></b><b></b><span>brandpreflight</span></div><code><small>you</small> Read <span id="skill-url">this site’s /skill.md</span> and set up BrandPreflight.<br><br><small>agent</small> <strong>✓</strong> Setup complete. Attach a brief and finished video when you’re ready.</code></div><h2>Get your agent<br>ready before your video ships.</h2><button class="button primary" id="copy-final">Copy setup prompt <span>→</span></button></section>
+    </main>
+
+    <footer class="shell"><a class="wordmark" href="/">brand<span>preflight</span></a><span>Local-first campaign QA for sponsored video.</span><a href="/skill.md">Hosted skill</a><a href="https://www.npmjs.com/package/brandpreflight">npm</a><a href="https://github.com/mastercoder26/ytautomation">GitHub</a></footer>
+    <script src="/app.js"></script>
+  </body>
+</html>
