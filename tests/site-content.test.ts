@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildSetupPrompt } from '../site/src/content.js';
+import { buildPromptPresentation, buildSetupPrompt } from '../site/src/content.js';
 
 describe('BrandPreflight setup prompt', () => {
   it('includes the selected agent context and hosted skill URL', () => {
@@ -18,5 +18,15 @@ describe('BrandPreflight setup prompt', () => {
     expect(codexPrompt).not.toEqual(cursorPrompt);
     expect(cursorPrompt).toContain('Cursor');
     expect(cursorPrompt).toContain(skillUrl);
+  });
+
+  it('provides one concise, centered-prompt presentation for the first screen', () => {
+    const presentation = buildPromptPresentation(
+      'Codex',
+      'https://brandpreflight.test/skill.md'
+    );
+
+    expect(presentation.label).toBe('Paste this into Codex');
+    expect(presentation.prompt).toContain('https://brandpreflight.test/skill.md');
   });
 });
