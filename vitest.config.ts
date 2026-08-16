@@ -8,7 +8,7 @@ export default defineConfig({
       provider: "v8",
       reporter: ["text", "json-summary"],
       include: ["src/**/*.ts"],
-      exclude: ["src/cli.ts", "src/mcp/index.ts"],
+      exclude: ["src/cli.ts", "src/mcp/index.ts", "src/brief/pdf-worker.ts"],
       thresholds: {
         branches: 80,
         functions: 80,

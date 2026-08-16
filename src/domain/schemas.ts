@@ -82,12 +82,20 @@ export const processingStatusSchema = z
   })
   .strict();
 
+export const reviewContextSchema = z
+  .object({
+    durationMs: z.number().int().positive().max(7_200_000),
+    transcript: z.array(transcriptSegmentSchema).max(20_000)
+  })
+  .strict();
+
 export type RequirementCategory = z.infer<typeof requirementCategorySchema>;
 export type CampaignRequirement = z.infer<typeof requirementSchema>;
 export type CampaignInput = z.infer<typeof campaignInputSchema>;
 export type Evidence = z.infer<typeof evidenceSchema>;
 export type TranscriptSegment = z.infer<typeof transcriptSegmentSchema>;
 export type ProcessingStatus = z.infer<typeof processingStatusSchema>;
+export type ReviewContext = z.infer<typeof reviewContextSchema>;
 
 export type RequirementResult = CampaignRequirement & {
   status: "satisfied" | "missed" | "at_risk" | "not_verifiable";

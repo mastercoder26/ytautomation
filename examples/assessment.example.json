@@ -1,0 +1,42 @@
+{
+  "campaign": {
+    "campaignId": "acme-launch",
+    "name": "Acme Launch",
+    "requirements": [
+      {
+        "id": "disclosure",
+        "category": "disclosure",
+        "description": "Say that this video is sponsored by Acme",
+        "priority": "required",
+        "verification": "transcript",
+        "polarity": "required"
+      }
+    ]
+  },
+  "evidence": [
+    {
+      "requirementId": "disclosure",
+      "source": "transcript",
+      "status": "satisfied",
+      "startMs": 1000,
+      "endMs": 2500,
+      "excerpt": "This video is sponsored by Acme.",
+      "confidence": 1
+    }
+  ],
+  "reviewContext": {
+    "durationMs": 2500,
+    "transcript": [
+      {
+        "startMs": 1000,
+        "endMs": 2500,
+        "text": "This video is sponsored by Acme."
+      }
+    ]
+  },
+  "processing": {
+    "transcriptStatus": "complete",
+    "visualStatus": "failed",
+    "modelAnalysisStatus": "complete"
+  }
+}

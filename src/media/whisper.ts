@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { z } from "zod";
 import { transcriptSegmentSchema, type TranscriptSegment } from "../domain/schemas.js";
-import { runProcess } from "./process.js";
+import { runProcess, safeNativeEnvironment } from "./process.js";
 
 const whisperOutputSchema = z
   .object({
@@ -51,7 +51,11 @@ export const transcribeWithWhisperCpp = async (options: {
     "-np",
     ...(options.language ? ["-l", options.language] : [])
   ];
-  await runner(options.command, args, { timeoutMs: 30 * 60_000, maxOutputBytes: 5_000_000 });
+  await runner(options.command, args, {
+    timeoutMs: 30 * 60_000,
+    maxOutputBytes: 5_000_000,
+    env: safeNativeEnvironment()
+  });
   const raw = await readFile(`${options.outputPrefix}.json`, "utf8");
   return parseWhisperJson(JSON.parse(raw));
 };

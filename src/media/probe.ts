@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { buildProbeArgs } from "./commands.js";
-import { runProcess } from "./process.js";
+import { runProcess, safeNativeEnvironment } from "./process.js";
 
 const probeSchema = z
   .object({
@@ -42,7 +42,7 @@ export const parseProbeJson = (raw: string): VideoMetadata => {
   if (!video?.width || !video.height) throw new Error("Video stream metadata is missing");
   const durationSeconds = Number(probe.format.duration ?? video.duration);
   if (!Number.isFinite(durationSeconds) || durationSeconds <= 0) throw new Error("Video duration is invalid");
-  if (durationSeconds > 7_200) throw new Error("Video duration limit exceeded");
+  if (durationSeconds > 1_800) throw new Error("Video duration limit exceeded");
   if (video.width * video.height > 20_000_000) throw new Error("Video pixel limit exceeded");
   const sizeBytes = Number(probe.format.size ?? 0);
   return {
@@ -56,7 +56,8 @@ export const parseProbeJson = (raw: string): VideoMetadata => {
 export const probeVideo = async (inputPath: string, ffprobeCommand = "ffprobe"): Promise<VideoMetadata> => {
   const result = await runProcess(ffprobeCommand, buildProbeArgs(inputPath), {
     timeoutMs: 15_000,
-    maxOutputBytes: 2_000_000
+    maxOutputBytes: 2_000_000,
+    env: safeNativeEnvironment()
   });
   return parseProbeJson(result.stdout);
 };

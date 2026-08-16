@@ -4,17 +4,29 @@ export type ProcessOptions = {
   timeoutMs: number;
   maxOutputBytes: number;
   cwd?: string;
+  stdin?: string | Uint8Array;
+  env?: NodeJS.ProcessEnv;
 };
 
 export type ProcessResult = { stdout: string; stderr: string; exitCode: number };
 
+export const safeNativeEnvironment = (): NodeJS.ProcessEnv => ({
+  PATH: process.env.PATH ?? "",
+  HOME: process.env.HOME ?? "",
+  TMPDIR: process.env.TMPDIR ?? "",
+  LANG: process.env.LANG ?? "C",
+  LC_ALL: "C"
+});
+
 export class ProcessExecutionError extends Error {
   readonly code: "TIMEOUT" | "OUTPUT_LIMIT" | "NON_ZERO_EXIT" | "SPAWN_FAILED";
+  readonly stderr: string;
 
-  constructor(code: ProcessExecutionError["code"], message: string) {
+  constructor(code: ProcessExecutionError["code"], message: string, stderr = "") {
     super(message);
     this.name = "ProcessExecutionError";
     this.code = code;
+    this.stderr = stderr;
   }
 }
 
@@ -26,18 +38,32 @@ export const runProcess = (
   new Promise((resolvePromise, rejectPromise) => {
     const child = spawn(command, [...args], {
       shell: false,
-      stdio: ["ignore", "pipe", "pipe"],
+      detached: process.platform !== "win32",
+      stdio: ["pipe", "pipe", "pipe"],
+      ...(options.env ? { env: options.env } : {}),
       ...(options.cwd ? { cwd: options.cwd } : {})
     });
     let stdout = "";
     let stderr = "";
     let settled = false;
 
+    const terminate = (): void => {
+      if (process.platform !== "win32" && child.pid) {
+        try {
+          process.kill(-child.pid, "SIGKILL");
+          return;
+        } catch {
+          // Fall back to killing the direct child below.
+        }
+      }
+      child.kill("SIGKILL");
+    };
+
     const settleError = (error: Error): void => {
       if (settled) return;
       settled = true;
       clearTimeout(timeout);
-      child.kill("SIGKILL");
+      terminate();
       rejectPromise(error);
     };
 
@@ -55,6 +81,7 @@ export const runProcess = (
     child.stderr.on("data", (chunk: Buffer) => {
       stderr = append(stderr, chunk);
     });
+    child.stdin.end(options.stdin);
     child.on("error", (error) => {
       settleError(new ProcessExecutionError("SPAWN_FAILED", `Unable to start process: ${error.message}`));
     });
@@ -63,7 +90,9 @@ export const runProcess = (
       settled = true;
       clearTimeout(timeout);
       if (exitCode !== 0) {
-        rejectPromise(new ProcessExecutionError("NON_ZERO_EXIT", `Process exited with code ${exitCode ?? -1}`));
+        rejectPromise(
+          new ProcessExecutionError("NON_ZERO_EXIT", `Process exited with code ${exitCode ?? -1}`, stderr)
+        );
         return;
       }
       resolvePromise({ stdout, stderr, exitCode: 0 });

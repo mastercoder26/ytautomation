@@ -1,8 +1,8 @@
-import { mkdtemp, mkdir, symlink, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, realpath, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { validateImportedFile } from "../../src/media/file-policy.js";
+import { copyImportedFile, validateImportedFile } from "../../src/media/file-policy.js";
 import {
   buildAudioExtractionArgs,
   buildFrameExtractionArgs,
@@ -14,7 +14,9 @@ describe("media file policy", () => {
     const root = await mkdtemp(join(tmpdir(), "brandpreflight-"));
     const video = join(root, "video.mp4");
     await writeFile(video, "fixture");
-    await expect(validateImportedFile(video, [root], "video")).resolves.toMatchObject({ path: video });
+    await expect(validateImportedFile(video, [root], "video")).resolves.toMatchObject({
+      path: await realpath(video)
+    });
   });
 
   it("rejects traversal, outside-root files, and symlinks", async () => {
@@ -39,6 +41,18 @@ describe("media file policy", () => {
     await expect(validateImportedFile(root, [root], "video")).rejects.toThrow("regular file");
     await expect(validateImportedFile(text, [root], "video")).rejects.toThrow("Unsupported video");
   });
+
+  it("copies through an opened no-follow handle into an exclusive destination", async () => {
+    const root = await mkdtemp(join(tmpdir(), "brandpreflight-copy-"));
+    const video = join(root, "video.mp4");
+    const destination = join(root, "private.mp4");
+    await writeFile(video, "safe-content");
+    await expect(copyImportedFile(video, [root], "video", destination)).resolves.toMatchObject({
+      path: destination,
+      size: 12
+    });
+    await expect(copyImportedFile(video, [root], "video", destination)).rejects.toThrow();
+  });
 });
 
 describe("native media command construction", () => {
@@ -53,7 +67,9 @@ describe("native media command construction", () => {
       "/tmp/input;touch pwn.mp4"
     ]);
     expect(buildAudioExtractionArgs("in.mp4", "out.wav").at(-1)).toBe("out.wav");
-    expect(buildFrameExtractionArgs("in.mp4", "frames/%04d.jpg", 12)).toContain("fps=1/12");
+    expect(buildFrameExtractionArgs("in.mp4", "frames/%04d.jpg", 12)).toContain(
+      "fps=1/12,scale='min(1024,iw)':-2"
+    );
   });
 
   it("rejects unsafe frame intervals", () => {

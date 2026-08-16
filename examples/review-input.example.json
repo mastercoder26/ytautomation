@@ -1,0 +1,24 @@
+{
+  "campaign": {
+    "campaignId": "acme-launch",
+    "name": "Acme Launch",
+    "requirements": [
+      {
+        "id": "disclosure",
+        "category": "disclosure",
+        "description": "Say that this video is sponsored by Acme",
+        "priority": "required",
+        "verification": "transcript",
+        "polarity": "required"
+      }
+    ]
+  },
+  "transcript": [
+    {
+      "startMs": 1000,
+      "endMs": 2500,
+      "text": "This video is sponsored by Acme."
+    }
+  ],
+  "visualObservations": []
+}

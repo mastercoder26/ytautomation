@@ -8,6 +8,7 @@ import {
   campaignInputSchema,
   evidenceSchema,
   processingStatusSchema,
+  reviewContextSchema,
   transcriptSegmentSchema
 } from "../domain/schemas.js";
 import { doctorLocalTools, prepareVideo } from "../media/prepare.js";
@@ -102,12 +103,34 @@ export const buildBrandPreflightServer = (options: BrandPreflightServerOptions):
         .object({
           campaign: campaignInputSchema,
           transcript: z.array(transcriptSegmentSchema).max(20_000),
-          visualObservations: z.array(visualObservationSchema).max(1_000)
+          visualObservations: z.array(visualObservationSchema).max(1_000),
+          consent: z
+            .object({ shareWithCurrentMcpHost: z.boolean() })
+            .strict()
         })
         .strict()
     },
-    async ({ campaign, transcript, visualObservations }) =>
-      success(buildAnalysisEnvelope({ requirements: campaign.requirements, transcript, visualObservations }))
+    async ({ campaign, transcript, visualObservations, consent }) =>
+      consent.shareWithCurrentMcpHost
+        ? success(
+            buildAnalysisEnvelope({
+              requirements: campaign.requirements,
+              transcript,
+              visualObservations
+            })
+          )
+        : {
+            isError: true,
+            content: [
+              {
+                type: "text" as const,
+                text: JSON.stringify({
+                  code: "CONSENT_REQUIRED",
+                  message: "Explicit consent is required before sharing review evidence with the MCP host model"
+                })
+              }
+            ]
+          }
   );
 
   server.registerTool(
@@ -151,13 +174,14 @@ export const buildBrandPreflightServer = (options: BrandPreflightServerOptions):
         .object({
           campaign: campaignInputSchema,
           evidence: z.array(evidenceSchema).max(5_000),
-          processing: processingStatusSchema.optional()
+          processing: processingStatusSchema.optional(),
+          reviewContext: reviewContextSchema
         })
         .strict()
     },
-    async ({ campaign, evidence, processing }) =>
+    async ({ campaign, evidence, processing, reviewContext }) =>
       success(
-        calculateReadiness(campaign, evidence, processing) as unknown as Record<string, unknown>
+        calculateReadiness(campaign, evidence, processing, reviewContext) as unknown as Record<string, unknown>
       )
   );
 

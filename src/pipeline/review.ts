@@ -46,6 +46,12 @@ const findExactPhraseEvidence = (
 export const reviewCampaign = (input: ReviewCampaignInput): CampaignReadinessReport => {
   const transcript = input.transcript.map((segment) => transcriptSegmentSchema.parse(segment));
   const exactPhraseEvidence = findExactPhraseEvidence(input.campaign, transcript);
+  const durationMs = Math.max(
+    1,
+    ...transcript.map((segment) => segment.endMs),
+    ...input.visualEvidence.map((item) => item.endMs),
+    ...(input.modelEvidence ?? []).map((item) => item.endMs)
+  );
   return calculateReadiness(
     input.campaign,
     [...exactPhraseEvidence, ...input.visualEvidence, ...(input.modelEvidence ?? [])],
@@ -53,6 +59,7 @@ export const reviewCampaign = (input: ReviewCampaignInput): CampaignReadinessRep
       transcriptStatus: transcript.length > 0 ? "complete" : "failed",
       visualStatus: input.visualEvidence.length > 0 ? "complete" : "partial",
       modelAnalysisStatus: input.modelEvidence ? "complete" : "skipped"
-    }
+    },
+    { durationMs, transcript }
   );
 };

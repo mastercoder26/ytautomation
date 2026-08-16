@@ -43,7 +43,7 @@ export const buildFrameExtractionArgs = (
     "-i",
     inputPath,
     "-vf",
-    `fps=1/${intervalSeconds}`,
+    `fps=1/${intervalSeconds},scale='min(1024,iw)':-2`,
     "-frames:v",
     "120",
     outputPattern

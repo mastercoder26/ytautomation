@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -7,6 +7,7 @@ import { parseProbeJson } from "../../src/media/probe.js";
 import { parseWhisperJson } from "../../src/media/whisper.js";
 import { runProcess } from "../../src/media/process.js";
 import { doctorLocalTools, prepareVideo } from "../../src/media/prepare.js";
+import { deleteArtifactDirectory } from "../../src/media/artifacts.js";
 import { transcribeWithWhisperCpp } from "../../src/media/whisper.js";
 
 describe("PDF adapter", () => {
@@ -154,6 +155,16 @@ describe("bounded process execution", () => {
     ).resolves.toMatchObject({ stdout: "ok", exitCode: 0 });
   });
 
+  it("can pass bounded stdin to an isolated worker process", async () => {
+    await expect(
+      runProcess(
+        process.execPath,
+        ["-e", "process.stdin.on('data', chunk => process.stdout.write(chunk))"],
+        { timeoutMs: 2_000, maxOutputBytes: 1_024, stdin: "local-only" }
+      )
+    ).resolves.toMatchObject({ stdout: "local-only", exitCode: 0 });
+  });
+
   it("terminates a process that exceeds its deadline", async () => {
     await expect(
       runProcess(process.execPath, ["-e", "setInterval(() => {}, 1000)"], {
@@ -204,7 +215,6 @@ describe("video preparation orchestration", () => {
       whisperCommand: "whisper-cli",
       whisperModelPath: join(root, "model.bin"),
       dependencies: {
-        now: () => 123,
         probe: async () => ({ durationMs: 10_000, width: 1080, height: 1920, sizeBytes: 7 }),
         run,
         transcribe: async () => [{ startMs: 0, endMs: 500, text: "Sponsored by Acme" }]
@@ -213,13 +223,23 @@ describe("video preparation orchestration", () => {
 
     expect(result).toMatchObject({
       transcriptStatus: "complete",
-      artifactDirectory: "creator.mp4-123",
       frames: [
         { id: "frame-0001", timestampMs: 0, reason: "uniform" },
         { id: "frame-0002", timestampMs: 5_000, reason: "uniform" }
       ]
     });
+    expect(result.artifactDirectory).toMatch(/^job-/);
     expect(result.frames.every((frame) => frame.sha256.length === 64)).toBe(true);
+    await expect(
+      deleteArtifactDirectory(dataRoot, result.artifactDirectory, true)
+    ).resolves.toEqual({ deleted: result.artifactDirectory });
+    expect(await readdir(dataRoot)).toEqual([]);
+    await expect(deleteArtifactDirectory(dataRoot, "../outside", true)).rejects.toThrow(
+      "Invalid artifact identifier"
+    );
+    await expect(deleteArtifactDirectory(dataRoot, "job-ABC123", false)).rejects.toThrow(
+      "explicit confirmation"
+    );
   });
 
   it("reports local tool readiness without network access", async () => {
@@ -253,7 +273,6 @@ describe("video preparation orchestration", () => {
       allowedRoots: [root],
       dataRoot: join(root, "artifacts"),
       dependencies: {
-        now: () => 456,
         probe: async () => ({ durationMs: 1_000, width: 100, height: 100, sizeBytes: 7 }),
         run: async (_command, args) => {
           const target = args.at(-1) ?? "";
@@ -267,5 +286,37 @@ describe("video preparation orchestration", () => {
       transcriptStatus: "failed",
       limitations: ["Local whisper.cpp command/model is not configured"]
     });
+  });
+
+  it("rejects a symlink artifact root and removes failed private jobs", async () => {
+    const root = await mkdtemp(join(tmpdir(), "brandpreflight-cleanup-"));
+    const videoPath = join(root, "creator.mp4");
+    const realArtifacts = join(root, "real-artifacts");
+    const linkedArtifacts = join(root, "linked-artifacts");
+    await writeFile(videoPath, "fixture");
+    await mkdir(realArtifacts);
+    await symlink(realArtifacts, linkedArtifacts);
+    await expect(
+      prepareVideo({
+        videoPath,
+        allowedRoots: [root],
+        dataRoot: linkedArtifacts
+      })
+    ).rejects.toThrow("symbolic link");
+
+    await expect(
+      prepareVideo({
+        videoPath,
+        allowedRoots: [root],
+        dataRoot: realArtifacts,
+        dependencies: {
+          probe: async () => ({ durationMs: 1_000, width: 100, height: 100, sizeBytes: 7 }),
+          run: async () => {
+            throw new Error("ffmpeg failed");
+          }
+        }
+      })
+    ).rejects.toThrow("ffmpeg failed");
+    expect(await readdir(realArtifacts)).toEqual([]);
   });
 });

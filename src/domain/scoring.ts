@@ -5,17 +5,47 @@ import {
   type CampaignReadinessReport,
   type Evidence,
   type ProcessingStatus,
+  type ReviewContext,
   type RequirementResult
 } from "./schemas.js";
 
 const WEIGHTS = { required: 5, high: 3, normal: 1 } as const;
 const CREDIT = { satisfied: 1, at_risk: 0.25, missed: 0, not_verifiable: 0 } as const;
 
-const statusFromEvidence = (evidence: readonly Evidence[]): RequirementResult["status"] => {
+const statusFromEvidence = (
+  evidence: readonly Evidence[],
+  verification: CampaignInput["requirements"][number]["verification"]
+): RequirementResult["status"] => {
   if (evidence.some((item) => item.status === "missed" || item.status === "violated")) return "missed";
   if (evidence.some((item) => item.status === "at_risk")) return "at_risk";
+  if (verification === "both") {
+    const satisfiedSources = new Set(
+      evidence.filter((item) => item.status === "satisfied").map((item) => item.source)
+    );
+    if (satisfiedSources.has("transcript") && satisfiedSources.has("visual")) return "satisfied";
+    if (satisfiedSources.size > 0) return "at_risk";
+  }
   if (evidence.some((item) => item.status === "satisfied")) return "satisfied";
   return "not_verifiable";
+};
+
+const sourceMatches = (
+  verification: CampaignInput["requirements"][number]["verification"],
+  source: Evidence["source"]
+): boolean =>
+  verification === "both"
+    ? source === "transcript" || source === "visual"
+    : verification === source;
+
+const excerptMatchesTranscript = (evidence: Evidence, context: ReviewContext): boolean => {
+  if (evidence.source !== "transcript" || evidence.status !== "satisfied") return true;
+  const excerpt = evidence.excerpt.toLocaleLowerCase();
+  return context.transcript.some(
+    (segment) =>
+      segment.startMs <= evidence.endMs &&
+      segment.endMs >= evidence.startMs &&
+      segment.text.toLocaleLowerCase().includes(excerpt)
+  );
 };
 
 const defaultProcessing: ProcessingStatus = {
@@ -27,7 +57,8 @@ const defaultProcessing: ProcessingStatus = {
 export const calculateReadiness = (
   input: CampaignInput,
   proposedEvidence: readonly unknown[],
-  processing: ProcessingStatus = defaultProcessing
+  processing: ProcessingStatus = defaultProcessing,
+  reviewContext?: ReviewContext
 ): CampaignReadinessReport => {
   const campaign = campaignInputSchema.parse(input);
   const knownIds = new Set(campaign.requirements.map((requirement) => requirement.id));
@@ -44,14 +75,42 @@ export const calculateReadiness = (
       limitations.push(`Discarded evidence for unknown requirement: ${parsed.data.requirementId}`);
       continue;
     }
+    const requirement = campaign.requirements.find((item) => item.id === parsed.data.requirementId);
+    if (!requirement || !sourceMatches(requirement.verification, parsed.data.source)) {
+      limitations.push(
+        `Discarded ${parsed.data.source} evidence incompatible with ${requirement?.verification ?? "unknown"} requirement: ${parsed.data.requirementId}`
+      );
+      continue;
+    }
+    if (reviewContext && parsed.data.endMs > reviewContext.durationMs) {
+      limitations.push(`Discarded evidence outside reviewed duration: ${parsed.data.requirementId}`);
+      continue;
+    }
+    if (reviewContext && !excerptMatchesTranscript(parsed.data, reviewContext)) {
+      limitations.push(`Discarded transcript evidence not found in cited segment: ${parsed.data.requirementId}`);
+      continue;
+    }
     evidence.push(parsed.data);
+  }
+
+  const needsTranscript = campaign.requirements.some(
+    (item) => item.verification === "transcript" || item.verification === "both"
+  );
+  const needsVisual = campaign.requirements.some(
+    (item) => item.verification === "visual" || item.verification === "both"
+  );
+  if (needsTranscript && processing.transcriptStatus !== "complete") {
+    limitations.push(`Transcript processing is ${processing.transcriptStatus}`);
+  }
+  if (needsVisual && processing.visualStatus !== "complete") {
+    limitations.push(`Visual processing is ${processing.visualStatus}`);
   }
 
   const requirements: RequirementResult[] = campaign.requirements.map((requirement) => {
     const matched = evidence
       .filter((item) => item.requirementId === requirement.id)
       .toSorted((left, right) => left.startMs - right.startMs || left.excerpt.localeCompare(right.excerpt));
-    const status = statusFromEvidence(matched);
+    const status = statusFromEvidence(matched, requirement.verification);
     return {
       ...requirement,
       status,

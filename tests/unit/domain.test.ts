@@ -207,4 +207,76 @@ describe("readiness scoring", () => {
     expect(report.score).toBeLessThan(100);
     expect(report.verdict).toBe("needs_changes");
   });
+
+  it("rejects the wrong evidence source for a requirement", () => {
+    const visualCampaign: CampaignInput = {
+      campaignId: "visual-campaign",
+      name: "Visual campaign",
+      requirements: [
+        {
+          id: "logo",
+          category: "visual_branding",
+          description: "Show the logo",
+          priority: "required",
+          verification: "visual",
+          polarity: "required"
+        }
+      ]
+    };
+    const report = calculateReadiness(visualCampaign, [
+      {
+        requirementId: "logo",
+        source: "transcript",
+        status: "satisfied",
+        startMs: 0,
+        endMs: 1_000,
+        excerpt: "The logo is visible",
+        confidence: 1
+      }
+    ]);
+    expect(report).toMatchObject({ score: 0, verdict: "inconclusive" });
+    expect(report.limitations).toContain("Discarded transcript evidence incompatible with visual requirement: logo");
+  });
+
+  it("rejects evidence outside the reviewed duration or absent from the cited transcript", () => {
+    const report = calculateReadiness(
+      campaign,
+      [
+        {
+          requirementId: "promo",
+          source: "transcript",
+          status: "satisfied",
+          startMs: 9_000,
+          endMs: 10_000,
+          excerpt: "SAVE20",
+          confidence: 1
+        },
+        {
+          requirementId: "disclosure",
+          source: "transcript",
+          status: "satisfied",
+          startMs: 0,
+          endMs: 500,
+          excerpt: "This video is sponsored",
+          confidence: 1
+        }
+      ],
+      {
+        transcriptStatus: "complete",
+        visualStatus: "failed",
+        modelAnalysisStatus: "complete"
+      },
+      {
+        durationMs: 2_000,
+        transcript: [{ startMs: 0, endMs: 500, text: "Nothing relevant here" }]
+      }
+    );
+    expect(report.score).toBe(0);
+    expect(report.limitations).toEqual(
+      expect.arrayContaining([
+        "Discarded evidence outside reviewed duration: promo",
+        "Discarded transcript evidence not found in cited segment: disclosure"
+      ])
+    );
+  });
 });

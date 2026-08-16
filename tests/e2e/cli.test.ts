@@ -36,11 +36,15 @@ describe("BrandPreflight CLI", () => {
             excerpt: "SAVE20",
             confidence: 1
           }
-        ]
+        ],
+        reviewContext: {
+          durationMs: 2_000,
+          transcript: [{ startMs: 1_000, endMs: 1_500, text: "SAVE20" }]
+        }
       })
     );
     const output: string[] = [];
-    const exitCode = await runCli(["score", "--input", input], {
+    const exitCode = await runCli(["score", "--input", input, "--root", root], {
       stdout: (value) => output.push(value),
       stderr: () => undefined
     });
