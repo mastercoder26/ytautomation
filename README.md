@@ -30,12 +30,19 @@ The skill inspects the video and uses this small CLI handoff internally:
 
 ```bash
 brandpreflight review --brief campaign.pdf --video sponsored-video.mp4
+# The command returns a review ID and the exact /watch command for the video.
 # The agent writes its required findings JSON to findings.json.
 brandpreflight score --review bp-review-8F3K --input findings.json
 brandpreflight open bp-7XQ4M2
 ```
 
 The agent supplies observations only. BrandPreflight rejects invalid findings, calculates the deterministic 0–100 score itself, and saves a signed report. You never need to create campaign JSON, artifact IDs, approval-token files, or review-context JSON.
+
+## How video watching works
+
+You do not need to upload a subtitle file. During a review, the coding agent runs the `watch` program included in the setup against the finished video. It checks available captions, samples timestamped frames, and can create a timestamped local transcript from the audio with Whisper when captions are unavailable. This gives the agent evidence for spoken disclosures, on-screen branding, claims, and calls to action.
+
+The video stays local by default. If transcription or visual coverage cannot be completed, BrandPreflight records that as a limitation and does not treat the related requirement as fully verified.
 
 ## What it checks
 
