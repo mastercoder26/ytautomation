@@ -36,6 +36,15 @@ describe("domain contracts", () => {
     expect(() => campaignInputSchema.parse({ ...campaign, ignored: true })).toThrow();
   });
 
+  it("rejects duplicate requirement identifiers", () => {
+    expect(() =>
+      campaignInputSchema.parse({
+        ...campaign,
+        requirements: [campaign.requirements[0], campaign.requirements[0]]
+      })
+    ).toThrow("Duplicate requirement ID");
+  });
+
   it("rejects evidence with an inverted timestamp range", () => {
     expect(() =>
       evidenceSchema.parse({
@@ -67,6 +76,25 @@ describe("domain contracts", () => {
       category: "prohibited_claim",
       polarity: "prohibited"
     });
+  });
+
+  it("classifies disclosure, visual, caption, CTA, promo, and talking-point lines", () => {
+    const normalized = normalizeRequirements([
+      "Disclose that this is sponsored",
+      "Show the logo on screen",
+      "Captions must be accurate",
+      "CTA: Visit example.test",
+      "Promo code: SAVE20",
+      "Mention the lightweight design"
+    ]);
+    expect(normalized.map((item) => item.category)).toEqual([
+      "disclosure",
+      "visual_branding",
+      "caption",
+      "call_to_action",
+      "promo_code",
+      "talking_point"
+    ]);
   });
 });
 
@@ -150,5 +178,33 @@ describe("readiness scoring", () => {
     ]);
     expect(report.limitations).toContain("Discarded evidence for unknown requirement: made-up");
     expect(report.score).toBe(0);
+  });
+
+  it("discards malformed evidence and gives at-risk evidence partial credit", () => {
+    const report = calculateReadiness(campaign, [
+      { nonsense: true },
+      {
+        requirementId: "disclosure",
+        source: "transcript",
+        status: "at_risk",
+        startMs: 0,
+        endMs: 100,
+        excerpt: "Disclosure may be unclear",
+        confidence: 0.5
+      },
+      {
+        requirementId: "promo",
+        source: "transcript",
+        status: "satisfied",
+        startMs: 100,
+        endMs: 200,
+        excerpt: "SAVE20",
+        confidence: 1
+      }
+    ]);
+    expect(report.limitations).toContain("Discarded malformed evidence");
+    expect(report.score).toBeGreaterThan(0);
+    expect(report.score).toBeLessThan(100);
+    expect(report.verdict).toBe("needs_changes");
   });
 });

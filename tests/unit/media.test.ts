@@ -29,6 +29,16 @@ describe("media file policy", () => {
     await expect(validateImportedFile(secret, [root], "video")).rejects.toThrow("outside allowed roots");
     await expect(validateImportedFile(link, [root], "video")).rejects.toThrow("symbolic links");
   });
+
+  it("rejects missing roots, NUL bytes, directories, and unsupported extensions", async () => {
+    const root = await mkdtemp(join(tmpdir(), "brandpreflight-policy-"));
+    const text = join(root, "notes.txt");
+    await writeFile(text, "fixture");
+    await expect(validateImportedFile(text, [], "video")).rejects.toThrow("allowed root");
+    await expect(validateImportedFile(`${text}\0`, [root], "video")).rejects.toThrow("NUL");
+    await expect(validateImportedFile(root, [root], "video")).rejects.toThrow("regular file");
+    await expect(validateImportedFile(text, [root], "video")).rejects.toThrow("Unsupported video");
+  });
 });
 
 describe("native media command construction", () => {
@@ -44,5 +54,10 @@ describe("native media command construction", () => {
     ]);
     expect(buildAudioExtractionArgs("in.mp4", "out.wav").at(-1)).toBe("out.wav");
     expect(buildFrameExtractionArgs("in.mp4", "frames/%04d.jpg", 12)).toContain("fps=1/12");
+  });
+
+  it("rejects unsafe frame intervals", () => {
+    expect(() => buildFrameExtractionArgs("in.mp4", "frames/%04d.jpg", 0)).toThrow("Frame interval");
+    expect(() => buildFrameExtractionArgs("in.mp4", "frames/%04d.jpg", 301)).toThrow("Frame interval");
   });
 });

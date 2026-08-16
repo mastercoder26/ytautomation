@@ -51,4 +51,29 @@ describe("offline campaign review", () => {
     );
     expect(report.verdict).toBe("needs_changes");
   });
+
+  it("marks a missing exact phrase and an empty transcript as needing changes", () => {
+    const report = reviewCampaign({
+      campaign: {
+        campaignId: "missing-phrase",
+        name: "Missing phrase",
+        requirements: [
+          {
+            id: "phrase",
+            category: "exact_phrase",
+            description: "Say the exact phrase",
+            exactText: "required phrase",
+            priority: "high",
+            verification: "transcript",
+            polarity: "required"
+          }
+        ]
+      },
+      transcript: [],
+      visualEvidence: [],
+      modelEvidence: []
+    });
+    expect(report).toMatchObject({ verdict: "needs_changes", processing: { transcriptStatus: "failed" } });
+    expect(report.requirements[0]?.status).toBe("missed");
+  });
 });
