@@ -1,9 +1,28 @@
 {
   "name": "brandpreflight",
   "version": "0.1.0",
-  "private": true,
   "description": "Local-first sponsored-content campaign QA skill, CLI, and MCP server.",
   "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "skills/brandpreflight-review",
+    "containers/media/Dockerfile",
+    "README.md",
+    "LICENSE"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./core": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./skill": "./skills/brandpreflight-review/SKILL.md"
+  },
   "engines": {
     "node": ">=20"
   },
@@ -11,12 +30,35 @@
     "brandpreflight": "dist/cli.js",
     "brandpreflight-mcp": "dist/mcp/index.js"
   },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mastercoder26/ytautomation.git"
+  },
+  "homepage": "https://github.com/mastercoder26/ytautomation#readme",
+  "bugs": {
+    "url": "https://github.com/mastercoder26/ytautomation/issues"
+  },
+  "keywords": [
+    "brand-safety",
+    "creator-economy",
+    "mcp",
+    "sponsored-content",
+    "video-qa",
+    "cli",
+    "agent"
+  ],
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:container": "node scripts/run-container-smoke.mjs",
     "test:coverage": "vitest run --coverage",
+    "package:check": "npm pack --dry-run",
+    "prepublishOnly": "npm run build",
     "start:mcp": "tsx src/mcp/index.ts",
     "cli": "tsx src/cli.ts",
     "check": "npm run typecheck && npm run test:coverage && npm run build"

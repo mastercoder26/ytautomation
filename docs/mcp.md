@@ -1,5 +1,13 @@
 # MCP reference
 
+Install the published package with `npm install -g brandpreflight`, or run it without installation through:
+
+```bash
+npx --yes --package brandpreflight brandpreflight-mcp
+```
+
+The package exposes both `brandpreflight` and `brandpreflight-mcp` binaries and includes the review skill under the `brandpreflight/skill` export.
+
 BrandPreflight uses `@modelcontextprotocol/server` v2 over stdio. The entry point is `dist/mcp/index.js`; stdout is reserved for JSON-RPC and diagnostics go to stderr.
 
 ## Tools

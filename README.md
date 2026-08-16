@@ -11,6 +11,30 @@ This repository currently provides:
 - the project-local `brandpreflight-review` skill;
 - offline unit, integration, MCP, security, and CLI tests.
 
+## Install from npm
+
+BrandPreflight is distributed as a zero-configuration Node package with both the CLI and MCP entrypoint:
+
+```bash
+npm install -g brandpreflight
+brandpreflight doctor
+brandpreflight skill
+```
+
+For a one-off run, use `npx --yes brandpreflight`. To register the MCP server in an MCP host without a global install:
+
+```toml
+[mcp_servers.brandpreflight]
+command = "npx"
+args = ["--yes", "--package", "brandpreflight", "brandpreflight-mcp"]
+env = {
+  BRANDPREFLIGHT_WORKSPACE_ROOT = "/absolute/path/containing/briefs-and-videos",
+  BRANDPREFLIGHT_DATA_DIR = "/absolute/private/path/brandpreflight-artifacts"
+}
+```
+
+`brandpreflight skill` prints the installed path to the bundled `brandpreflight-review` skill so it can be copied or registered by an agent host.
+
 ## Local setup
 
 Use Node.js 20, 22, or 24 for the best PDF-parser compatibility.
@@ -90,6 +114,7 @@ See [the architecture notes](docs/architecture.md), [scoring contract](docs/scor
 ```bash
 npm run check
 python3 /path/to/skill-creator/scripts/quick_validate.py skills/brandpreflight-review
+npm run package:check
 ```
 
 The test gate requires at least 80% coverage for statements, branches, functions, and lines.

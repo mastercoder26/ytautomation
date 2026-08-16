@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-import { resolve } from "node:path";
-import { pathToFileURL } from "node:url";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { z } from "zod";
 import { extractRequirementCandidates } from "./brief/extract.js";
 import { extractPdfText } from "./brief/pdf.js";
@@ -34,6 +34,7 @@ const help = `BrandPreflight local sponsored-content QA
 
 Commands:
   doctor
+  skill
   approve --campaign FILE --root DIR --data-dir DIR
   brief --text FILE|--pdf FILE --campaign-id ID --name NAME --root DIR
   prepare --campaign FILE --video FILE --root DIR --data-dir DIR [--frame-interval SECONDS]
@@ -112,6 +113,7 @@ export const runCli = async (argv: readonly string[], io: CliIo = defaultIo): Pr
   try {
     const flags = parseFlags(rest);
     if (command === "doctor") {
+      const mediaContainer = configuredMediaContainer();
       printJson(
         io,
         await doctorLocalTools({
@@ -122,9 +124,19 @@ export const runCli = async (argv: readonly string[], io: CliIo = defaultIo): Pr
             : {}),
           ...(process.env.BRANDPREFLIGHT_WHISPER_MODEL
             ? { whisperModelPath: process.env.BRANDPREFLIGHT_WHISPER_MODEL }
-            : {})
+            : {}),
+          ...(mediaContainer ? { mediaContainer } : {})
         })
       );
+      return 0;
+    }
+
+    if (command === "skill") {
+      const skillPath = resolve(
+        dirname(fileURLToPath(import.meta.url)),
+        "../skills/brandpreflight-review/SKILL.md"
+      );
+      printJson(io, { name: "brandpreflight-review", path: skillPath });
       return 0;
     }
 

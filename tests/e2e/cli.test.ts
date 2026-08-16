@@ -5,6 +5,19 @@ import { describe, expect, it } from "vitest";
 import { runCli } from "../../src/cli.js";
 
 describe("BrandPreflight CLI", () => {
+  it("locates the bundled review skill after npm installation", async () => {
+    const output: string[] = [];
+    const exitCode = await runCli(["skill"], {
+      stdout: (value) => output.push(value),
+      stderr: () => undefined
+    });
+    expect(exitCode).toBe(0);
+    expect(JSON.parse(output.join(""))).toMatchObject({
+      name: "brandpreflight-review",
+      path: expect.stringContaining("skills/brandpreflight-review/SKILL.md")
+    });
+  });
+
   it("scores a structured assessment from a local JSON file", async () => {
     const root = await mkdtemp(join(tmpdir(), "brandpreflight-cli-"));
     const input = join(root, "assessment.json");
