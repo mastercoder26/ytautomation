@@ -25,6 +25,9 @@ void serveStdio(
     ...(process.env.BRANDPREFLIGHT_WHISPER_MODEL
       ? { whisperModelPath: process.env.BRANDPREFLIGHT_WHISPER_MODEL }
       : {}),
+    ...(process.env.BRANDPREFLIGHT_WATCH_SKILL_PATH
+      ? { watchSkillPath: process.env.BRANDPREFLIGHT_WATCH_SKILL_PATH }
+      : {}),
     ...(mediaContainer ? { mediaContainer } : {})
   }),
   { transport: new StdioServerTransport(process.stdin, process.stdout, { maxBufferSize: 2_500_000 }) }

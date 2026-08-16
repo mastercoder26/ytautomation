@@ -25,6 +25,22 @@ describe("signed local reports", () => {
     });
 
     expect(saved.reportId).toMatch(/^bp-[A-Z0-9]{6,20}$/);
+    await expect(writeReport(dataRoot, {
+      reviewId: "bp-review-8F3L",
+      report: {
+        campaignId: "acme-two",
+        score: 0,
+        verdict: "inconclusive",
+        requirements: [],
+        processing: {
+          transcriptStatus: "failed",
+          visualStatus: "failed",
+          modelAnalysisStatus: "skipped"
+        },
+        limitations: []
+      },
+      limitations: []
+    })).resolves.toMatchObject({ reportId: expect.stringMatching(/^bp-/) });
     expect((await loadReport(dataRoot, saved.reportId)).report.score).toBe(92);
 
     const stored = JSON.parse(await readFile(saved.reportPath, "utf8")) as Record<string, unknown>;

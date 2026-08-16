@@ -56,9 +56,24 @@ describe("BrandPreflight MCP", () => {
         "brandpreflight_extract_requirements",
         "brandpreflight_build_review_packet",
         "brandpreflight_prepare_video",
+        "brandpreflight_review",
         "brandpreflight_score"
       ])
     );
+  });
+
+  it("exposes high-level review and score boundaries without accepting fabricated sessions", async () => {
+    const client = await connect();
+    const review = await client.callTool({
+      name: "brandpreflight_review",
+      arguments: { briefPath: "/missing/brief.txt", videoPath: "/missing/video.mp4" }
+    });
+    expect(review.isError).toBe(true);
+    const score = await client.callTool({
+      name: "brandpreflight_score",
+      arguments: { version: 1, reviewId: "bp-review-8F3K", findings: [], limitations: [] }
+    });
+    expect(score.isError).toBe(true);
   });
 
   it("extracts a brief and returns structured content", async () => {

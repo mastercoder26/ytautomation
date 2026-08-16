@@ -2,13 +2,14 @@
 
 ## MCP-first path
 
-Use these tools in order:
+Use these tools in order for the normal agent-facing flow:
 
 1. `brandpreflight_doctor`
-2. `brandpreflight_extract_requirements`
-3. `brandpreflight_prepare_video`
-4. `brandpreflight_build_review_packet`
-5. `brandpreflight_score`
+2. `brandpreflight_review` with the user's brief and video
+3. inspect the supplied media and return the exact findings contract
+4. `brandpreflight_score` with that contract
+
+`brandpreflight_review` owns campaign extraction, artifact preparation, and the private review ID. `brandpreflight_score` writes a signed report and returns an `openCommand`. Do not make the user construct campaign, artifact, approval, or review-context files. The lower-level tools remain only for legacy integrations.
 
 The stdio server reads its local policy from environment variables:
 
@@ -43,12 +44,9 @@ From the repository root after `npm install && npm run build`:
 
 ```bash
 node dist/cli.js doctor
-node dist/cli.js brief --pdf campaign.pdf --campaign-id launch-01 --name "Launch" --root .
-node dist/cli.js prepare --campaign campaign.json --video creator.mp4 --root . --data-dir /absolute/private/path/to/artifacts
-node dist/cli.js approve --campaign campaign.json --root . --data-dir /absolute/private/path/to/artifacts
-node dist/cli.js packet --input review-input.json --root .
-node dist/cli.js score --input assessment.json --root .
-node dist/cli.js clean --artifact job-ABC123 --data-dir .brandpreflight --yes true
+node dist/cli.js review --brief campaign.pdf --video creator.mp4 --data-dir /absolute/private/path/to/artifacts
+node dist/cli.js score --review bp-review-8F3K --input findings.json --data-dir /absolute/private/path/to/artifacts
+node dist/cli.js open bp-7XQ4M2 --data-dir /absolute/private/path/to/artifacts
 ```
 
 Every command prints JSON to stdout and diagnostics to stderr. For MCP workflows, use the exact external `BRANDPREFLIGHT_DATA_DIR` for both preparation and approval; the server rejects artifact roots inside the workspace.
@@ -63,7 +61,7 @@ Use the bounded frame manifest for the first pass. Inspect a focused range when:
 - the transcript says “look here,” “as you can see,” or a similar visual cue;
 - an editing/caption issue depends on motion or timing.
 
-When `/watch` exists, run it only for those ambiguous ranges and translate observations into BrandPreflight evidence with honest confidence. If visual inspection is unavailable, use `not_verifiable`.
+When `/watch` exists, run it only for those ambiguous ranges and translate observations into BrandPreflight evidence with honest confidence. It is a host-specific optional integration and must not be installed automatically. If visual inspection is unavailable, use `not_verifiable`.
 
 ## Failure handling
 

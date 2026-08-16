@@ -31,6 +31,12 @@ describe("BrandPreflight agent findings contract", () => {
         confidence: 0.98
       }
     ]);
+    expect(toEvidence(agentFindingsSchema.parse({
+      version: 1,
+      reviewId: "bp-review-8F3K",
+      findings: [{ ...finding, source: "captions" }],
+      limitations: []
+    }).findings)).toMatchObject([{ source: "transcript" }]);
   });
 
   it("rejects score fields, unsupported sources, inverted ranges, and unknown fields", () => {

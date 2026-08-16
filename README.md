@@ -23,81 +23,24 @@ Or run it once with no global install:
 npx --yes brandpreflight doctor
 ```
 
-## What you can do
+## Agent-first workflow
 
-### Check a campaign brief
+Install the Codex plugin, attach the campaign PDF and finished video, then tell your agent:
 
-Use a PDF or a text file. BrandPreflight extracts requirements such as exact phrases, disclosures, promo codes, calls to action, prohibited claims, branding, captions, and editing rules.
+> Use BrandPreflight to review this sponsored video against the attached campaign brief.
 
-```bash
-brandpreflight brief \
-  --pdf campaign.pdf \
-  --campaign-id acme-launch \
-  --name "Acme Launch" \
-  --root . > campaign.json
-```
+The skill calls `brandpreflight_review`, which extracts requirements, processes the video locally, and returns a private review ID plus the strict JSON shape for agent findings. The agent reviews transcript, frames, captions, disclosure, branding, and claims; it never supplies a score. `brandpreflight_score` validates those findings against the signed local evidence, calculates the score, and saves a signed browser report.
 
-For a text brief, replace `--pdf campaign.pdf` with `--text brief.txt`.
-
-Always open `campaign.json` and fix anything ambiguous before continuing.
-
-### Analyze a finished video locally
+The equivalent human/agent CLI flow is:
 
 ```bash
-brandpreflight prepare \
-  --campaign campaign.json \
-  --video creator-video.mp4 \
-  --root . \
-  --data-dir /absolute/private/brandpreflight-artifacts
+brandpreflight review --brief campaign.pdf --video sponsored-video.mp4
+# write the returned versioned findings JSON to findings.json
+brandpreflight score --review bp-review-8F3K --input findings.json
+brandpreflight open bp-7XQ4M2
 ```
 
-The local media pipeline creates:
-
-- video metadata and duration;
-- bounded audio and video frames through FFmpeg;
-- a timestamped whisper.cpp transcript when configured;
-- a signed artifact manifest tied to the exact campaign.
-
-### Use your own AI model
-
-BrandPreflight does not require a hosted AI provider. Your chosen model reviews the transcript and visual observations; BrandPreflight supplies the review packet and validates the answer.
-
-Before transcript evidence is shared, approve it explicitly:
-
-```bash
-brandpreflight approve \
-  --campaign campaign.json \
-  --root . \
-  --data-dir /absolute/private/brandpreflight-artifacts
-```
-
-The approval is one-time and campaign-specific. The AI model cannot approve its own access or invent the final score.
-
-### Inspect visual issues
-
-Use the extracted frames first. If your agent host supports `/watch`, use it to inspect an exact timestamp for issues like:
-
-- missing or incorrect branding;
-- competitor products;
-- disclosure placement;
-- caption problems;
-- editing mistakes;
-- visual claims that are not supported.
-
-`/watch` is optional. It is not required by the local runtime.
-
-### Get a readiness score
-
-The final result includes:
-
-- a score from 0–100;
-- `ready`, `needs_changes`, `blocked`, or `inconclusive`;
-- satisfied, missed, and at-risk requirements;
-- timestamped evidence;
-- specific changes to make before submission;
-- limitations for anything that was not fully reviewed.
-
-The score is calculated locally. A model cannot simply return “ready.”
+No user-authored `campaign.json`, artifact ID, approval-token file, or review-context JSON is required. Legacy low-level commands remain available for integrations that already use them.
 
 ## MCP setup
 
@@ -118,10 +61,9 @@ env = {
 The MCP server provides:
 
 - `brandpreflight_doctor` — check local tools;
-- `brandpreflight_extract_requirements` — parse a brief;
-- `brandpreflight_prepare_video` — create signed local evidence;
-- `brandpreflight_build_review_packet` — build the AI review packet after approval;
-- `brandpreflight_score` — validate findings and calculate the score.
+- `brandpreflight_review` — start a review directly from a brief and video;
+- `brandpreflight_score` — validate strict findings, calculate a score, and save a signed report;
+- legacy extraction, preparation, packet, and score tools for existing integrations.
 
 The bundled agent skill is included in the npm package:
 
@@ -150,12 +92,14 @@ export BRANDPREFLIGHT_WHISPER_MODEL=/absolute/path/to/ggml-base.en.bin
 
 Without whisper.cpp, BrandPreflight can still inspect frames but will mark transcript checks incomplete.
 
+If the agent host offers the separate `/watch` skill, it can help with an ambiguous focused timestamp. BrandPreflight detects and documents readiness through `doctor`; it never silently installs FFmpeg, yt-dlp, or another agent host's skill. Those setup actions affect the local machine and must be explicitly authorized.
+
 ## Safety and privacy
 
 - Briefs, videos, transcripts, frames, and reports stay local by default.
 - Native tools run in an offline, resource-limited container.
 - The data directory must be outside the model-accessible workspace.
-- Artifact manifests and approvals are signed locally.
+- Artifact manifests, review sessions, and final reports are signed locally.
 - Evidence timestamps, sources, excerpts, and campaign requirements are validated.
 - Incomplete processing produces an inconclusive or limited result instead of a false “ready.”
 

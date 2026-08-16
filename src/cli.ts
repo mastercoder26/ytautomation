@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 import { realpathSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { homedir } from "node:os";
+import { basename, dirname, extname, resolve } from "node:path";
+import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
 import { extractRequirementCandidates } from "./brief/extract.js";
@@ -19,6 +21,10 @@ import {
 import { doctorLocalTools, prepareVideo } from "./media/prepare.js";
 import { readImportedFile } from "./media/file-policy.js";
 import { deleteArtifactDirectory } from "./media/artifacts.js";
+import { agentFindingsSchema } from "./domain/agent-findings.js";
+import { scoreReview } from "./pipeline/score-review.js";
+import { serveReport } from "./reports/server.js";
+import { writeReviewSession } from "./reviews/store.js";
 import type { MediaContainerConfig } from "./media/container.js";
 
 export type CliIo = {
@@ -35,6 +41,9 @@ const help = `BrandPreflight local sponsored-content QA
 
 Commands:
   doctor
+  review --brief FILE --video FILE [--root DIR] [--data-dir DIR] [--campaign-id ID] [--name NAME]
+  score --review ID --input FINDINGS.json [--root DIR] [--data-dir DIR]
+  open REPORT_ID [--data-dir DIR]
   skill
   approve --campaign FILE --root DIR --data-dir DIR
   brief --text FILE|--pdf FILE --campaign-id ID --name NAME --root DIR
@@ -104,6 +113,15 @@ const configuredMediaContainer = (): MediaContainerConfig | undefined => {
     : undefined;
 };
 
+const defaultDataRoot = (): string => resolve(process.env.BRANDPREFLIGHT_DATA_DIR ?? resolve(homedir(), ".brandpreflight"));
+
+const openBrowser = (url: string): void => {
+  const command = process.platform === "darwin" ? "open" : process.platform === "win32" ? "cmd" : "xdg-open";
+  const args = process.platform === "win32" ? ["/c", "start", "", url] : [url];
+  const child = spawn(command, args, { stdio: "ignore", detached: true });
+  child.unref();
+};
+
 export const runCli = async (argv: readonly string[], io: CliIo = defaultIo): Promise<number> => {
   const [command, ...rest] = argv;
   if (!command || command === "help" || command === "--help" || command === "-h") {
@@ -112,7 +130,7 @@ export const runCli = async (argv: readonly string[], io: CliIo = defaultIo): Pr
   }
 
   try {
-    const flags = parseFlags(rest);
+    const flags = parseFlags(command === "open" ? rest.slice(1) : rest);
     if (command === "doctor") {
       const mediaContainer = configuredMediaContainer();
       printJson(
@@ -126,9 +144,55 @@ export const runCli = async (argv: readonly string[], io: CliIo = defaultIo): Pr
           ...(process.env.BRANDPREFLIGHT_WHISPER_MODEL
             ? { whisperModelPath: process.env.BRANDPREFLIGHT_WHISPER_MODEL }
             : {}),
+          ...(process.env.BRANDPREFLIGHT_WATCH_SKILL_PATH
+            ? { watchSkillPath: process.env.BRANDPREFLIGHT_WATCH_SKILL_PATH }
+            : {}),
           ...(mediaContainer ? { mediaContainer } : {})
         })
       );
+      return 0;
+    }
+
+    if (command === "review") {
+      const briefPath = resolve(requireFlag(flags, "brief"));
+      const videoPath = resolve(requireFlag(flags, "video"));
+      const root = resolve(flags.get("root") ?? dirname(briefPath));
+      const dataRoot = resolve(flags.get("data-dir") ?? defaultDataRoot());
+      const campaignId = flags.get("campaign-id") ?? `campaign-${Date.now().toString(36)}`;
+      const name = flags.get("name") ?? basename(briefPath, extname(briefPath));
+      const briefText = extname(briefPath).toLowerCase() === ".pdf"
+        ? (await extractPdfText(briefPath, [root], undefined, configuredMediaContainer())).text
+        : (await readImportedFile(briefPath, [root], "text")).data.toString("utf8");
+      const campaign = campaignInputSchema.parse({
+        campaignId,
+        name,
+        requirements: extractRequirementCandidates(briefText)
+      });
+      const mediaContainer = configuredMediaContainer();
+      const prepared = await prepareVideo({
+        videoPath,
+        campaignId: campaign.campaignId,
+        campaignDigest: digestCampaign(campaign),
+        allowedRoots: [root],
+        dataRoot,
+        ...(process.env.BRANDPREFLIGHT_FFMPEG ? { ffmpegCommand: process.env.BRANDPREFLIGHT_FFMPEG } : {}),
+        ...(process.env.BRANDPREFLIGHT_FFPROBE ? { ffprobeCommand: process.env.BRANDPREFLIGHT_FFPROBE } : {}),
+        ...(process.env.BRANDPREFLIGHT_WHISPER_COMMAND ? { whisperCommand: process.env.BRANDPREFLIGHT_WHISPER_COMMAND } : {}),
+        ...(process.env.BRANDPREFLIGHT_WHISPER_MODEL ? { whisperModelPath: process.env.BRANDPREFLIGHT_WHISPER_MODEL } : {}),
+        ...(mediaContainer ? { mediaContainer } : {})
+      });
+      const session = await writeReviewSession(dataRoot, { campaign, artifactId: prepared.artifactDirectory });
+      printJson(io, {
+        reviewId: session.reviewId,
+        requirements: campaign.requirements,
+        findingsContract: {
+          version: 1,
+          reviewId: session.reviewId,
+          findings: [],
+          limitations: []
+        },
+        limitations: prepared.limitations
+      });
       return 0;
     }
 
@@ -221,6 +285,14 @@ export const runCli = async (argv: readonly string[], io: CliIo = defaultIo): Pr
     }
 
     if (command === "score") {
+      if (flags.get("review")) {
+        const root = resolve(flags.get("root") ?? dirname(requireFlag(flags, "input")));
+        const findings = agentFindingsSchema.parse(await readJson(requireFlag(flags, "input"), root));
+        const reviewId = requireFlag(flags, "review");
+        if (findings.reviewId !== reviewId) throw new Error("Findings reviewId does not match --review");
+        printJson(io, await scoreReview(resolve(flags.get("data-dir") ?? defaultDataRoot()), findings));
+        return 0;
+      }
       const input = scoreInputSchema.parse(
         await readJson(requireFlag(flags, "input"), resolve(requireFlag(flags, "root")))
       );
@@ -228,6 +300,16 @@ export const runCli = async (argv: readonly string[], io: CliIo = defaultIo): Pr
         io,
         calculateReadiness(input.campaign, input.evidence, input.processing, input.reviewContext)
       );
+      return 0;
+    }
+
+    if (command === "open") {
+      const reportId = rest[0];
+      if (!reportId || reportId.startsWith("--")) throw new Error("Missing report ID");
+      const server = await serveReport({ dataRoot: resolve(flags.get("data-dir") ?? defaultDataRoot()), reportId });
+      openBrowser(server.url);
+      io.stdout(`${JSON.stringify({ reportId, url: server.url, message: "Press Ctrl+C to stop the local report server." }, null, 2)}\n`);
+      await new Promise<void>(() => undefined);
       return 0;
     }
 

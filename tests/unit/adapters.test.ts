@@ -293,6 +293,16 @@ describe("video preparation orchestration", () => {
     });
   });
 
+  it("reports whether an explicitly configured host watch skill is installed", async () => {
+    const root = await mkdtemp(join(tmpdir(), "brandpreflight-watch-"));
+    await mkdir(join(root, "scripts"));
+    await writeFile(join(root, "scripts", "watch.py"), "# fixture");
+    await expect(doctorLocalTools({ watchSkillPath: root }, async () => ({ stdout: "", stderr: "", exitCode: 0 })))
+      .resolves.toMatchObject({ watch: { installed: true, path: root } });
+    await expect(doctorLocalTools({ watchSkillPath: join(root, "missing") }, async () => ({ stdout: "", stderr: "", exitCode: 0 })))
+      .resolves.toMatchObject({ watch: { installed: false } });
+  });
+
   it("prepares frames without claiming a transcript when whisper is not configured", async () => {
     const root = await mkdtemp(join(tmpdir(), "brandpreflight-prepare-local-"));
     const videoPath = join(root, "creator.mp4");

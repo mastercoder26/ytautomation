@@ -206,6 +206,7 @@ export const doctorLocalTools = async (config: {
   whisperCommand?: string | undefined;
   whisperModelPath?: string | undefined;
   mediaContainer?: MediaContainerConfig | undefined;
+  watchSkillPath?: string | undefined;
 }, runner: typeof runProcess = runProcess) => {
   const check = async (command: string): Promise<boolean> => {
     try {
@@ -224,12 +225,19 @@ export const doctorLocalTools = async (config: {
     check(config.ffprobeCommand ?? "ffprobe"),
     config.whisperCommand ? check(config.whisperCommand) : Promise.resolve(false)
   ]);
+  const watchSkillPath = config.watchSkillPath;
+  const watch = watchSkillPath
+    ? await lstat(resolve(watchSkillPath, "scripts", "watch.py"))
+      .then((stats) => ({ installed: stats.isFile(), path: resolve(watchSkillPath) }))
+      .catch(() => ({ installed: false, path: resolve(watchSkillPath) }))
+    : undefined;
   return {
     ffmpeg,
     ffprobe,
     whisperCpp: whisper,
     whisperModelConfigured: Boolean(config.whisperModelPath),
     mediaSandboxConfigured: Boolean(config.mediaContainer),
-    networkUsed: false
+    networkUsed: false,
+    ...(watch ? { watch } : {})
   };
 };

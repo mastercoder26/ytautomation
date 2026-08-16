@@ -1,6 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/server";
 import { lstatSync, mkdirSync, realpathSync } from "node:fs";
-import { relative, resolve, sep } from "node:path";
+import { basename, extname, relative, resolve, sep } from "node:path";
 import { z } from "zod";
 import { extractRequirementCandidates } from "../brief/extract.js";
 import { extractPdfText } from "../brief/pdf.js";
@@ -15,6 +15,10 @@ import {
 import { loadArtifactReview } from "../media/manifest.js";
 import { doctorLocalTools, prepareVideo, type PreparedVideo } from "../media/prepare.js";
 import type { MediaContainerConfig } from "../media/container.js";
+import { readImportedFile } from "../media/file-policy.js";
+import { writeReviewSession } from "../reviews/store.js";
+import { scoreReview } from "../pipeline/score-review.js";
+import { agentFindingsSchema } from "../domain/agent-findings.js";
 
 export type BrandPreflightServerOptions = {
   allowedRoots: readonly string[];
@@ -24,6 +28,7 @@ export type BrandPreflightServerOptions = {
   whisperCommand?: string;
   whisperModelPath?: string;
   mediaContainer?: MediaContainerConfig;
+  watchSkillPath?: string;
 };
 
 const failure = (error: unknown) => ({
@@ -111,6 +116,17 @@ const scoreInputSchema = z
       ...value.evidence.map((item) => item.excerpt)
     ])
   );
+
+const highLevelScoreInputSchema = agentFindingsSchema;
+
+const reviewInputSchema = z
+  .object({
+    briefPath: z.string().min(1).max(4_096),
+    videoPath: z.string().min(1).max(4_096),
+    campaignId: z.string().trim().min(1).max(120).optional(),
+    name: z.string().trim().min(1).max(200).optional()
+  })
+  .strict();
 
 const isInsideOrEqual = (candidate: string, root: string): boolean => {
   const fromRoot = relative(resolve(root), resolve(candidate));
@@ -266,13 +282,59 @@ export const buildBrandPreflightServer = (options: BrandPreflightServerOptions):
   );
 
   server.registerTool(
+    "brandpreflight_review",
+    {
+      description:
+        "Start one local sponsored-video review from an attached brief and finished video. Returns a review ID and the strict findings contract; it never exposes internal artifact IDs.",
+      inputSchema: reviewInputSchema
+    },
+    async ({ briefPath, videoPath, campaignId, name }) => {
+      try {
+        const resolvedBriefPath = resolve(briefPath);
+        const briefText = extname(resolvedBriefPath).toLowerCase() === ".pdf"
+          ? (await extractPdfText(resolvedBriefPath, options.allowedRoots, undefined, options.mediaContainer)).text
+          : (await readImportedFile(resolvedBriefPath, options.allowedRoots, "text")).data.toString("utf8");
+        const campaign = campaignInputSchema.parse({
+          campaignId: campaignId ?? `campaign-${Date.now().toString(36)}`,
+          name: name ?? basename(resolvedBriefPath, extname(resolvedBriefPath)),
+          requirements: extractRequirementCandidates(briefText)
+        });
+        const prepared = await prepareVideo({
+          videoPath: resolve(videoPath),
+          campaignId: campaign.campaignId,
+          campaignDigest: digestCampaign(campaign),
+          allowedRoots: options.allowedRoots,
+          dataRoot,
+          ffmpegCommand: options.ffmpegCommand,
+          ffprobeCommand: options.ffprobeCommand,
+          whisperCommand: options.whisperCommand,
+          whisperModelPath: options.whisperModelPath,
+          mediaContainer: options.mediaContainer
+        });
+        const session = await writeReviewSession(dataRoot, { campaign, artifactId: prepared.artifactDirectory });
+        return success({
+          reviewId: session.reviewId,
+          requirements: campaign.requirements,
+          findingsContract: { version: 1, reviewId: session.reviewId, findings: [], limitations: [] },
+          limitations: prepared.limitations
+        });
+      } catch (error) {
+        return failure(error);
+      }
+    }
+  );
+
+  server.registerTool(
     "brandpreflight_score",
     {
-      description: "Validate evidence and calculate the deterministic Campaign Readiness Score.",
-      inputSchema: scoreInputSchema
+      description:
+        "Validate strict agent findings for a review ID, calculate the deterministic Campaign Readiness Score, and save a signed local report. Legacy campaign/evidence scoring remains supported.",
+      inputSchema: z.union([highLevelScoreInputSchema, scoreInputSchema])
     },
-    async ({ campaign, evidence, artifactId }) => {
+    async (input) => {
       try {
+        if ("reviewId" in input) return success(await scoreReview(dataRoot, input));
+        const { campaign, evidence, artifactId } = input;
         const { processing, reviewContext } = await loadArtifactReview(
           dataRoot,
           artifactId,
