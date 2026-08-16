@@ -1,4 +1,11 @@
-import { lazy, Suspense, useEffect, useRef, useState } from 'react';
+import {
+  lazy,
+  Suspense,
+  type PropsWithChildren,
+  useEffect,
+  useRef,
+  useState
+} from 'react';
 import type { Application } from '@splinetool/runtime';
 
 const Spline = lazy(() => import('@splinetool/react-spline'));
@@ -29,7 +36,7 @@ function usePrefersReducedMotion(): boolean {
   return reducedMotion;
 }
 
-export function SplineHero() {
+export function SplineHero({ children }: PropsWithChildren) {
   const reduceMotion = usePrefersReducedMotion();
   const heroRef = useRef<HTMLElement>(null);
   const splineAppRef = useRef<Application | null>(null);
@@ -72,8 +79,9 @@ export function SplineHero() {
   return (
     <section
       ref={heroRef}
-      aria-label="BrandPreflight campaign control room"
-      className="spline-hero"
+      id="top"
+      aria-label="BrandPreflight setup"
+      className="portfolio-spline-hero"
     >
       <div className="spline-watermark-cover" aria-hidden="true">
         {!reduceMotion && (
@@ -87,6 +95,7 @@ export function SplineHero() {
         )}
       </div>
       <div className="spline-vignette" aria-hidden="true" />
+      <div className="portfolio-hero-foreground">{children}</div>
     </section>
   );
 }

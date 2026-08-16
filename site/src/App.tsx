@@ -1,9 +1,15 @@
-import { useMemo, useState } from 'react';
-import { AGENTS, buildSetupPrompt, featureCards, workflowSteps } from './content';
+import { useEffect, useMemo, useState } from 'react';
+import {
+  AGENTS,
+  buildPromptPresentation,
+  buildSetupPrompt,
+  featureCards,
+  workflowSteps
+} from './content';
 import type { AgentName } from './content';
 import { SplineHero } from './SplineHero';
 
-type CopyTarget = 'setup' | 'final';
+type CopyTarget = 'hero' | 'setup' | 'final';
 
 const GITHUB_URL = 'https://github.com/mastercoder26/ytautomation';
 
@@ -98,10 +104,36 @@ function CopyButton({
   );
 }
 
+function CenteredPrompt({
+  label,
+  prompt,
+  copied,
+  copyFailed,
+  onCopy
+}: {
+  label: string;
+  prompt: string;
+  copied: boolean;
+  copyFailed: boolean;
+  onCopy: () => void;
+}) {
+  return (
+    <div className="centered-prompt" role="group" aria-label="BrandPreflight setup prompt">
+      <p className="centered-prompt-label">{label}</p>
+      <code className="centered-prompt-code">{prompt}</code>
+      <button type="button" className="centered-prompt-button" onClick={onCopy}>
+        {copied ? 'Copied — paste it into your agent' : copyFailed ? 'Try copying again' : 'Copy prompt'}
+        <span aria-hidden="true">{copied ? '✓' : '↗'}</span>
+      </button>
+    </div>
+  );
+}
+
 export default function App() {
   const [selectedAgent, setSelectedAgent] = useState<AgentName>('Codex');
   const [copiedTarget, setCopiedTarget] = useState<CopyTarget | null>(null);
   const [copyFailed, setCopyFailed] = useState(false);
+  const [showScrollButton, setShowScrollButton] = useState(true);
   const skillUrl = useMemo(() => {
     if (typeof window === 'undefined') {
       return '/skill.md';
@@ -113,6 +145,21 @@ export default function App() {
     () => buildSetupPrompt(selectedAgent, skillUrl),
     [selectedAgent, skillUrl]
   );
+  const promptPresentation = useMemo(
+    () => buildPromptPresentation(selectedAgent, skillUrl),
+    [selectedAgent, skillUrl]
+  );
+
+  useEffect(() => {
+    const updateScrollButton = () => {
+      setShowScrollButton(window.scrollY === 0);
+    };
+
+    window.addEventListener('scroll', updateScrollButton, { passive: true });
+    updateScrollButton();
+
+    return () => window.removeEventListener('scroll', updateScrollButton);
+  }, []);
 
   const handleCopy = async (target: CopyTarget) => {
     setCopyFailed(false);
@@ -140,71 +187,21 @@ export default function App() {
   return (
     <div className="app-shell">
       <main>
-        <section className="hero-section" id="top" aria-labelledby="hero-title">
-          <SplineHero />
-          <div className="hero-noise" aria-hidden="true" />
-
-          <header className="site-nav shell">
-            <a className="brand-link" href="#top" aria-label="BrandPreflight home">
-              <BrandMark />
+        <SplineHero>
+          <CenteredPrompt
+            label={promptPresentation.label}
+            prompt={promptPresentation.prompt}
+            copied={copiedTarget === 'hero'}
+            copyFailed={copyFailed}
+            onCopy={() => handleCopy('hero')}
+          />
+          {showScrollButton && (
+            <a className="portfolio-scroll-button" href="#setup">
+              <span>Scroll</span>
+              <span aria-hidden="true">↘</span>
             </a>
-            <nav aria-label="Primary navigation">
-              <a href="#setup">Setup</a>
-              <a href="#workflow">Workflow</a>
-              <a href={GITHUB_URL} target="_blank" rel="noreferrer">
-                GitHub ↗
-              </a>
-            </nav>
-            <a className="nav-action" href="#setup">
-              Set up my agent <span>↗</span>
-            </a>
-          </header>
-
-          <div className="hero-content shell">
-            <div className="hero-copy">
-              <div className="eyebrow eyebrow-light">
-                <span className="eyebrow-dot" aria-hidden="true" />
-                agent-ready sponsored-content QA
-              </div>
-              <h1 id="hero-title">
-                <span>Ship the</span>
-                <span>video.</span>
-                <em>Not the surprises.</em>
-              </h1>
-              <p className="hero-lede">
-                BrandPreflight turns a campaign brief and finished video into a signed,
-                timestamped readiness report — through the agent you already use.
-              </p>
-              <div className="hero-actions">
-                <a className="button button-primary" href="#setup">
-                  Set up BrandPreflight <span>↗</span>
-                </a>
-                <a className="button button-quiet" href="#workflow">
-                  See how it works <span>↓</span>
-                </a>
-              </div>
-              <div className="hero-signal">
-                <span className="signal-dot" aria-hidden="true" />
-                <span>Local-first evidence</span>
-                <i aria-hidden="true" />
-                <span>Deterministic scoring</span>
-                <i aria-hidden="true" />
-                <span>Signed reports</span>
-              </div>
-            </div>
-
-            <div className="hero-console">
-              <div className="console-label">review session / 001</div>
-              <TerminalWindow skillUrl={skillUrl} />
-            </div>
-          </div>
-
-          <a className="scroll-cue shell" href="#setup">
-            <span>Scroll to initialize</span>
-            <span className="scroll-cue-line" aria-hidden="true" />
-            <span aria-hidden="true">↓</span>
-          </a>
-        </section>
+          )}
+        </SplineHero>
 
         <section className="setup-section section-light" id="setup">
           <div className="shell">
