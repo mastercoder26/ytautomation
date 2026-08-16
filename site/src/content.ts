@@ -13,6 +13,13 @@ export function buildSetupPrompt(agent: AgentName, skillUrl: string): string {
   return `${agentOpeners[agent]} install BrandPreflight from https://github.com/mastercoder26/ytautomation, then read the hosted setup skill at ${skillUrl}, finish the private setup steps, and tell me when you are ready to review a sponsored video.`;
 }
 
+export function buildPromptPresentation(agent: AgentName, skillUrl: string) {
+  return {
+    label: `Paste this into ${agent}`,
+    prompt: buildSetupPrompt(agent, skillUrl)
+  };
+}
+
 export const workflowSteps = [
   {
     number: '01',
