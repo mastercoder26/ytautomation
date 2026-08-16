@@ -54,7 +54,7 @@ describe("high-level review scoring", () => {
       limitations: []
     });
 
-    expect(result).toMatchObject({ score: 100, verdict: "ready", openCommand: `brandpreflight open ${result.reportId}` });
+    expect(result).toMatchObject({ score: 100, verdict: "ready", summary: "1/1 requirements satisfied; verdict: ready.", openCommand: `brandpreflight open ${result.reportId}` });
     expect((await loadReport(dataRoot, result.reportId)).reviewId).toBe(session.reviewId);
 
     const reportServer = await serveReport({ dataRoot, reportId: result.reportId });

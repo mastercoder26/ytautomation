@@ -9,6 +9,7 @@ export const scoreReview = async (dataRoot: string, input: AgentFindings): Promi
   reportId: string;
   score: number;
   verdict: string;
+  summary: string;
   reportPath: string;
   openCommand: string;
 }> => {
@@ -26,10 +27,12 @@ export const scoreReview = async (dataRoot: string, input: AgentFindings): Promi
     report,
     limitations: findings.limitations
   });
+  const satisfied = report.requirements.filter((requirement) => requirement.status === "satisfied").length;
   return {
     reportId: saved.reportId,
     score: report.score,
     verdict: report.verdict,
+    summary: `${satisfied}/${report.requirements.length} requirements satisfied; verdict: ${report.verdict}.`,
     reportPath: saved.reportPath,
     openCommand: `brandpreflight open ${saved.reportId}`
   };
