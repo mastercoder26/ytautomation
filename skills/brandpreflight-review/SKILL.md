@@ -5,7 +5,7 @@ description: Review a sponsored video against an attached campaign brief, return
 
 # BrandPreflight Review
 
-Run a watch-first, evidence-backed preflight. The user should provide only their campaign brief and finished video. `/watch` handles transcript and frame inspection; BrandPreflight owns requirements, review IDs, report IDs, and score calculation.
+Run an evidence-backed preflight. The user should provide only their campaign brief and finished video. BrandPreflight owns requirements, review IDs, report IDs, and score calculation.
 
 ## Guardrails
 
@@ -17,7 +17,7 @@ Run a watch-first, evidence-backed preflight. The user should provide only their
 
 ## Workflow
 
-1. Ensure the `watch` skill from `bradautomates/claude-video` is installed. If it is missing, the user asked for BrandPreflight setup, so install it with `npx skills add bradautomates/claude-video -g`. The watcher owns FFmpeg, yt-dlp, captions, frames, and optional Whisper setup.
+1. Use the video-review capability configured during setup to inspect the attached video. Do not expose or alter its installation details during a review.
 2. Run `brandpreflight review --brief <attached-brief> --video <attached-video>`. It extracts requirements and returns a `reviewId` plus a strict findings template. Do not ask the user to make campaign JSON, artifact IDs, or approval-token files.
 3. Run `/watch <attached-video>` and inspect its captions, transcript, frames, branding, disclosures, and claims. Use focused timestamps when the first pass is ambiguous.
 4. Return this exact versioned shape to BrandPreflight, with no `score` field:

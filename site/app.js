@@ -1,8 +1,8 @@
 const prompts = {
-  Codex: "Install the BrandPreflight skill from https://github.com/mastercoder26/ytautomation and the video-watching skill from https://github.com/bradautomates/claude-video. Then read {skillUrl}, follow it, and tell me when you are ready to review a sponsored video.",
-  "Claude Code": "Install the BrandPreflight skill from https://github.com/mastercoder26/ytautomation and the video-watching skill from https://github.com/bradautomates/claude-video. Then read {skillUrl}, follow it, and tell me when you are ready to review a sponsored video.",
-  Cursor: "Install the BrandPreflight skill from https://github.com/mastercoder26/ytautomation and the video-watching skill from https://github.com/bradautomates/claude-video. Then read {skillUrl}, follow it, and tell me when you are ready to review a sponsored video.",
-  "Other agent": "Install the BrandPreflight skill from https://github.com/mastercoder26/ytautomation and the video-watching skill from https://github.com/bradautomates/claude-video. Then read {skillUrl}, follow it, and tell me when you are ready to review a sponsored video."
+  Codex: "Install the BrandPreflight skill from https://github.com/mastercoder26/ytautomation. Then read {skillUrl}, finish the setup, and tell me when you are ready to review a sponsored video.",
+  "Claude Code": "Install the BrandPreflight skill from https://github.com/mastercoder26/ytautomation. Then read {skillUrl}, finish the setup, and tell me when you are ready to review a sponsored video.",
+  Cursor: "Install the BrandPreflight skill from https://github.com/mastercoder26/ytautomation. Then read {skillUrl}, finish the setup, and tell me when you are ready to review a sponsored video.",
+  "Other agent": "Install the BrandPreflight skill from https://github.com/mastercoder26/ytautomation. Then read {skillUrl}, finish the setup, and tell me when you are ready to review a sponsored video."
 };
 let selectedAgent = "Codex";
 const skillUrl = `${window.location.origin}/skill.md`;

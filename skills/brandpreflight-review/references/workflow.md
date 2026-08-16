@@ -1,6 +1,6 @@
 # BrandPreflight workflow
 
-This is a two-skill flow: [`/watch`](https://github.com/bradautomates/claude-video) observes a local video, and BrandPreflight scores those observations against the campaign brief.
+BrandPreflight uses the configured video-review capability to observe a local video, then scores those observations against the campaign brief.
 
 1. Run `brandpreflight review --brief <brief> --video <video>`. It extracts requirements and returns a private `reviewId` plus the exact findings contract.
 2. Run `/watch <video>`. Inspect captions, transcript, frames, branding, disclosure, claims, and any ambiguous timestamps.
