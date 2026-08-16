@@ -1,10 +1,19 @@
-import { mkdtemp, writeFile } from "node:fs/promises";
+import { mkdtemp, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
-import { runCli } from "../../src/cli.js";
+import { isCliEntrypoint, runCli } from "../../src/cli.js";
 
 describe("BrandPreflight CLI", () => {
+  it("recognizes an npm-style symlinked executable", async () => {
+    const root = await mkdtemp(join(tmpdir(), "brandpreflight-cli-bin-"));
+    const modulePath = fileURLToPath(new URL("../../src/cli.ts", import.meta.url));
+    const symlinkPath = join(root, "brandpreflight");
+    await symlink(modulePath, symlinkPath);
+    expect(isCliEntrypoint(symlinkPath, pathToFileURL(modulePath).href)).toBe(true);
+  });
+
   it("locates the bundled review skill after npm installation", async () => {
     const output: string[] = [];
     const exitCode = await runCli(["skill"], {

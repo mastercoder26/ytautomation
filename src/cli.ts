@@ -1,6 +1,7 @@
 #!/usr/bin/env node
+import { realpathSync } from "node:fs";
 import { dirname, resolve } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 import { z } from "zod";
 import { extractRequirementCandidates } from "./brief/extract.js";
 import { extractPdfText } from "./brief/pdf.js";
@@ -251,9 +252,16 @@ export const runCli = async (argv: readonly string[], io: CliIo = defaultIo): Pr
   }
 };
 
-const isDirectExecution = process.argv[1]
-  ? pathToFileURL(resolve(process.argv[1])).href === import.meta.url
-  : false;
+export const isCliEntrypoint = (entryPath: string | undefined, moduleUrl: string): boolean => {
+  if (!entryPath) return false;
+  try {
+    return realpathSync(resolve(entryPath)) === realpathSync(fileURLToPath(moduleUrl));
+  } catch {
+    return false;
+  }
+};
+
+const isDirectExecution = isCliEntrypoint(process.argv[1], import.meta.url);
 
 if (isDirectExecution) {
   runCli(process.argv.slice(2)).then((exitCode) => {
