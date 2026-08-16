@@ -1,4 +1,4 @@
 interface:
-  display_name: "BrandPreflight Review"
-  short_description: "Preflight sponsored videos before brand submission"
-  default_prompt: "Use $brandpreflight-review to check my campaign brief and finished video for missing requirements."
+  display_name: "BrandPreflight"
+  short_description: "Review sponsored videos and save a signed local report"
+  default_prompt: "Use $brandpreflight to review this sponsored video against the attached campaign brief."

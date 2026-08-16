@@ -1,0 +1,10 @@
+:root { color: #152118; background: #f6f4ee; font-family: ui-rounded, system-ui, sans-serif; }
+body { margin: 0; }
+main { max-width: 760px; margin: 0 auto; padding: 64px 24px; }
+.eyebrow { color: #69736b; font-size: .75rem; font-weight: 800; letter-spacing: .12em; }
+h1 { font-size: clamp(2rem, 7vw, 4rem); margin: .2rem 0 2rem; }
+.score { display: flex; align-items: baseline; gap: 1rem; padding: 2rem; border-radius: 1rem; background: #d8f3dc; }
+.score strong { font-size: 4rem; }
+.score span { font-weight: 700; text-transform: capitalize; }
+section { margin-top: 2.5rem; }
+li { margin: .75rem 0; line-height: 1.45; }
