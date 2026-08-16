@@ -39,12 +39,12 @@ Weights are `required=5`, `high=3`, and `normal=1`.
 - `missed`, `violated`, or `not_verifiable`: zero credit.
 - Missing evidence becomes `not_verifiable`, never `satisfied`.
 - A missed required disclosure or violated required prohibited-claim rule caps the score at 49 and yields `blocked`.
-- `ready` requires at least 85 and no missed/at-risk items.
+- `ready` requires at least 85, no missed/at-risk items, and complete processing for every required verification stream.
 - All-unverified reviews are `inconclusive`.
 
 BrandPreflight sorts evidence and limitations before output so identical inputs produce identical reports.
 
-The scoring request must include `reviewContext.durationMs` and the timestamped `reviewContext.transcript`. BrandPreflight rejects evidence beyond that duration, satisfied transcript excerpts that do not occur in an overlapping cited segment, and sources incompatible with the requirement's verification mode.
+The MCP scoring request must include the prepared `artifactId`. BrandPreflight loads a signed local manifest bound to a digest of the entire structured campaign, including its requirements. It rejects changed/removed requirements, cross-campaign artifact reuse, evidence beyond the measured duration, satisfied transcript excerpts absent from an overlapping cited segment, incompatible evidence sources, and tampered manifests.
 
 ## BYOM boundary
 

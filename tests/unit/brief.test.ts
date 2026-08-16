@@ -1,8 +1,36 @@
 import { describe, expect, it } from "vitest";
 import { extractRequirementCandidates } from "../../src/brief/extract.js";
+import { buildPdfContainerInvocation } from "../../src/media/container.js";
 import { buildAnalysisEnvelope } from "../../src/byom/envelope.js";
 
 describe("brief extraction", () => {
+  it("builds an offline PDF container command with hard resource limits", () => {
+    const command = buildPdfContainerInvocation({
+      runtime: "docker",
+      image: `sha256:${"d".repeat(64)}`
+    });
+    expect(command.command).toBe("docker");
+    expect(command.args).toEqual(
+      expect.arrayContaining([
+        "--interactive",
+        "--network",
+        "none",
+        "--memory",
+        "512m",
+        "--cpus",
+        "1",
+        "/usr/bin/timeout",
+        "--signal=KILL",
+        "25s",
+        "--max-old-space-size=256",
+        "--permission",
+        "/app/dist/brief/pdf-worker.js"
+      ])
+    );
+    expect(command.args).not.toContain("--mount");
+    expect(JSON.stringify(command.args)).not.toContain("app-source");
+  });
+
   it("extracts campaign requirement candidates from common labels and bullets", () => {
     const brief = `
 Campaign: Acme Launch

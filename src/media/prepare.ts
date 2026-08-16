@@ -3,7 +3,9 @@ import { chmod, lstat, mkdir, mkdtemp, readFile, readdir, realpath, rm, stat } f
 import { extname, join, relative, resolve, sep } from "node:path";
 import type { TranscriptSegment } from "../domain/schemas.js";
 import { buildAudioExtractionArgs, buildFrameExtractionArgs } from "./commands.js";
+import { createMediaContainerRunner, type MediaContainerConfig } from "./container.js";
 import { copyImportedFile } from "./file-policy.js";
+import { writeArtifactManifest } from "./manifest.js";
 import { probeVideo, type VideoMetadata } from "./probe.js";
 import { runProcess, safeNativeEnvironment } from "./process.js";
 import { transcribeWithWhisperCpp } from "./whisper.js";
@@ -44,21 +46,20 @@ const sha256 = async (path: string): Promise<string> =>
 
 const prepareVideoOnce = async (options: {
   videoPath: string;
+  campaignId: string;
+  campaignDigest: string;
   allowedRoots: readonly string[];
   dataRoot: string;
-  frameIntervalSeconds?: number;
-  ffmpegCommand?: string;
-  ffprobeCommand?: string;
-  whisperCommand?: string;
-  whisperModelPath?: string;
-  language?: string;
-  dependencies?: Partial<PrepareDependencies>;
+  frameIntervalSeconds?: number | undefined;
+  ffmpegCommand?: string | undefined;
+  ffprobeCommand?: string | undefined;
+  whisperCommand?: string | undefined;
+  whisperModelPath?: string | undefined;
+  language?: string | undefined;
+  mediaContainer?: MediaContainerConfig | undefined;
+  dependencies?: Partial<PrepareDependencies> | undefined;
 }): Promise<PreparedVideo> => {
-  const dependencies: PrepareDependencies = {
-    probe: options.dependencies?.probe ?? probeVideo,
-    run: options.dependencies?.run ?? runProcess,
-    transcribe: options.dependencies?.transcribe ?? transcribeWithWhisperCpp
-  };
+  const hasTrustedAdapters = Boolean(options.dependencies?.probe && options.dependencies?.run);
   const dataRoot = resolve(options.dataRoot);
   await mkdir(dataRoot, { recursive: true, mode: 0o700 });
   const dataRootStats = await lstat(dataRoot);
@@ -66,11 +67,22 @@ const prepareVideoOnce = async (options: {
     throw new Error("Artifact root must be a real directory, not a symbolic link");
   }
   const canonicalDataRoot = await realpath(dataRoot);
+  if (!hasTrustedAdapters && !options.mediaContainer) {
+    throw new Error("Native media processing requires a pinned Docker/Podman sandbox image");
+  }
   const artifactRoot = await mkdtemp(join(canonicalDataRoot, "job-"));
   await chmod(artifactRoot, 0o700);
   if (!isWithin(artifactRoot, canonicalDataRoot)) throw new Error("Unsafe artifact path");
 
   try {
+    const sandboxedRun = options.mediaContainer
+      ? createMediaContainerRunner(options.mediaContainer, artifactRoot)
+      : options.dependencies?.run ?? runProcess;
+    const probe = options.dependencies?.probe ??
+      ((path: string, command?: string) => probeVideo(path, command, sandboxedRun));
+    const transcribe = options.dependencies?.transcribe ??
+      ((transcriptionOptions: Parameters<typeof transcribeWithWhisperCpp>[0]) =>
+        transcribeWithWhisperCpp(transcriptionOptions, sandboxedRun));
     const framesRoot = join(artifactRoot, "frames");
     await mkdir(framesRoot, { mode: 0o700 });
     const stagedInputPath = join(artifactRoot, `input${extname(options.videoPath).toLowerCase()}`);
@@ -82,21 +94,23 @@ const prepareVideoOnce = async (options: {
     );
 
     const ffmpeg = options.ffmpegCommand ?? "ffmpeg";
-    const metadata = await dependencies.probe(staged.path, options.ffprobeCommand);
+    const metadata = await probe(staged.path, options.ffprobeCommand);
     const interval = options.frameIntervalSeconds ?? Math.max(1, Math.ceil(metadata.durationMs / 120_000));
     const audioPath = join(artifactRoot, "audio.wav");
-    await dependencies.run(ffmpeg, buildAudioExtractionArgs(staged.path, audioPath), {
+    await sandboxedRun(ffmpeg, buildAudioExtractionArgs(staged.path, audioPath), {
       timeoutMs: 30 * 60_000,
       maxOutputBytes: 2_000_000,
-      env: safeNativeEnvironment()
+      env: safeNativeEnvironment(),
+      writeBudget: { paths: [audioPath], maxBytes: 100_000_000 }
     });
-    await dependencies.run(
+    await sandboxedRun(
       ffmpeg,
       buildFrameExtractionArgs(staged.path, join(framesRoot, "%04d.jpg"), interval),
       {
         timeoutMs: 30 * 60_000,
         maxOutputBytes: 2_000_000,
-        env: safeNativeEnvironment()
+        env: safeNativeEnvironment(),
+        writeBudget: { paths: [framesRoot], maxBytes: 400_000_000 }
       }
     );
 
@@ -119,10 +133,20 @@ const prepareVideoOnce = async (options: {
 
     const hasWhisper = Boolean(options.whisperCommand && options.whisperModelPath);
     const transcriptOutputPrefix = join(artifactRoot, "transcript");
+    const stagedModelPath = hasWhisper && !options.dependencies?.transcribe
+      ? (
+          await copyImportedFile(
+            options.whisperModelPath ?? "",
+            [resolve(options.whisperModelPath ?? "", "..")],
+            "model",
+            join(artifactRoot, `model${extname(options.whisperModelPath ?? "").toLowerCase()}`)
+          )
+        ).path
+      : options.whisperModelPath;
     const transcript = hasWhisper
-      ? await dependencies.transcribe({
+      ? await transcribe({
           command: options.whisperCommand ?? "whisper-cli",
-          modelPath: options.whisperModelPath ?? "",
+          modelPath: stagedModelPath ?? "",
           audioPath,
           outputPrefix: transcriptOutputPrefix,
           ...(options.language ? { language: options.language } : {})
@@ -130,14 +154,32 @@ const prepareVideoOnce = async (options: {
       : [];
     if (hasWhisper) await chmod(`${transcriptOutputPrefix}.json`, 0o600).catch(() => undefined);
 
-    await Promise.all([rm(staged.path, { force: true }), rm(audioPath, { force: true })]);
+    const artifactDirectory = relative(canonicalDataRoot, artifactRoot);
+    await writeArtifactManifest(canonicalDataRoot, artifactRoot, {
+      artifactId: artifactDirectory,
+      campaignId: options.campaignId,
+      campaignDigest: options.campaignDigest,
+      durationMs: metadata.durationMs,
+      transcript,
+      transcriptStatus: hasWhisper ? "complete" : "failed",
+      visualStatus: frames.length > 0 ? "complete" : "failed",
+      frameDigest: createHash("sha256").update(JSON.stringify(frames)).digest("hex")
+    });
+
+    await Promise.all([
+      rm(staged.path, { force: true }),
+      rm(audioPath, { force: true }),
+      stagedModelPath && !options.dependencies?.transcribe
+        ? rm(stagedModelPath, { force: true })
+        : Promise.resolve()
+    ]);
 
     return {
       metadata,
       transcript,
       transcriptStatus: hasWhisper ? "complete" : "failed",
       frames,
-      artifactDirectory: relative(canonicalDataRoot, artifactRoot),
+      artifactDirectory,
       limitations: hasWhisper ? [] : ["Local whisper.cpp command/model is not configured"]
     };
   } catch (error) {
@@ -159,10 +201,11 @@ export const prepareVideo = async (
 };
 
 export const doctorLocalTools = async (config: {
-  ffmpegCommand?: string;
-  ffprobeCommand?: string;
-  whisperCommand?: string;
-  whisperModelPath?: string;
+  ffmpegCommand?: string | undefined;
+  ffprobeCommand?: string | undefined;
+  whisperCommand?: string | undefined;
+  whisperModelPath?: string | undefined;
+  mediaContainer?: MediaContainerConfig | undefined;
 }, runner: typeof runProcess = runProcess) => {
   const check = async (command: string): Promise<boolean> => {
     try {
@@ -186,6 +229,7 @@ export const doctorLocalTools = async (config: {
     ffprobe,
     whisperCpp: whisper,
     whisperModelConfigured: Boolean(config.whisperModelPath),
+    mediaSandboxConfigured: Boolean(config.mediaContainer),
     networkUsed: false
   };
 };

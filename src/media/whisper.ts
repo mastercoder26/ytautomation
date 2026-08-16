@@ -1,4 +1,5 @@
-import { readFile } from "node:fs/promises";
+import { constants } from "node:fs";
+import { open } from "node:fs/promises";
 import { z } from "zod";
 import { transcriptSegmentSchema, type TranscriptSegment } from "../domain/schemas.js";
 import { runProcess, safeNativeEnvironment } from "./process.js";
@@ -12,7 +13,7 @@ const whisperOutputSchema = z
           text: z.string()
         })
         .passthrough()
-    )
+    ).max(20_000)
   })
   .passthrough();
 
@@ -51,11 +52,22 @@ export const transcribeWithWhisperCpp = async (options: {
     "-np",
     ...(options.language ? ["-l", options.language] : [])
   ];
+  const outputPath = `${options.outputPrefix}.json`;
   await runner(options.command, args, {
     timeoutMs: 30 * 60_000,
     maxOutputBytes: 5_000_000,
-    env: safeNativeEnvironment()
+    env: safeNativeEnvironment(),
+    writeBudget: { paths: [outputPath], maxBytes: 10_000_000 }
   });
-  const raw = await readFile(`${options.outputPrefix}.json`, "utf8");
-  return parseWhisperJson(JSON.parse(raw));
+  const noFollow = "O_NOFOLLOW" in constants ? constants.O_NOFOLLOW : 0;
+  const handle = await open(outputPath, constants.O_RDONLY | noFollow);
+  try {
+    const stats = await handle.stat();
+    if (!stats.isFile() || stats.size > 10_000_000) {
+      throw new Error("Whisper JSON exceeds the 10 MB size limit");
+    }
+    return parseWhisperJson(JSON.parse((await handle.readFile()).toString("utf8")));
+  } finally {
+    await handle.close();
+  }
 };

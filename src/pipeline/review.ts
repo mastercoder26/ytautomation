@@ -1,5 +1,6 @@
 import { calculateReadiness } from "../domain/scoring.js";
 import {
+  reviewContextSchema,
   transcriptSegmentSchema,
   type CampaignInput,
   type CampaignReadinessReport,
@@ -10,6 +11,7 @@ import {
 export type ReviewCampaignInput = {
   campaign: CampaignInput;
   transcript: TranscriptSegment[];
+  durationMs: number;
   visualEvidence: Evidence[];
   modelEvidence?: Evidence[];
 };
@@ -46,12 +48,7 @@ const findExactPhraseEvidence = (
 export const reviewCampaign = (input: ReviewCampaignInput): CampaignReadinessReport => {
   const transcript = input.transcript.map((segment) => transcriptSegmentSchema.parse(segment));
   const exactPhraseEvidence = findExactPhraseEvidence(input.campaign, transcript);
-  const durationMs = Math.max(
-    1,
-    ...transcript.map((segment) => segment.endMs),
-    ...input.visualEvidence.map((item) => item.endMs),
-    ...(input.modelEvidence ?? []).map((item) => item.endMs)
-  );
+  const reviewContext = reviewContextSchema.parse({ durationMs: input.durationMs, transcript });
   return calculateReadiness(
     input.campaign,
     [...exactPhraseEvidence, ...input.visualEvidence, ...(input.modelEvidence ?? [])],
@@ -60,6 +57,6 @@ export const reviewCampaign = (input: ReviewCampaignInput): CampaignReadinessRep
       visualStatus: input.visualEvidence.length > 0 ? "complete" : "partial",
       modelAnalysisStatus: input.modelEvidence ? "complete" : "skipped"
     },
-    { durationMs, transcript }
+    reviewContext
   );
 };

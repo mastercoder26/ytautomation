@@ -23,6 +23,8 @@ export const buildAudioExtractionArgs = (inputPath: string, outputPath: string):
   "16000",
   "-c:a",
   "pcm_s16le",
+  "-fs",
+  "100000000",
   outputPath
 ];
 
@@ -43,9 +45,11 @@ export const buildFrameExtractionArgs = (
     "-i",
     inputPath,
     "-vf",
-    `fps=1/${intervalSeconds},scale='min(1024,iw)':-2`,
+    `fps=1/${intervalSeconds},scale=1024:1024:force_original_aspect_ratio=decrease`,
     "-frames:v",
     "120",
+    "-fs",
+    "400000000",
     outputPattern
   ];
 };

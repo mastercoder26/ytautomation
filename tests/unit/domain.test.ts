@@ -120,11 +120,23 @@ describe("readiness scoring", () => {
         confidence: 0.95
       }
     ];
+    const processing = {
+      transcriptStatus: "complete" as const,
+      visualStatus: "failed" as const,
+      modelAnalysisStatus: "complete" as const
+    };
+    const reviewContext = {
+      durationMs: 1_500,
+      transcript: [
+        { startMs: 100, endMs: 900, text: "This video is sponsored by Acme" },
+        { startMs: 1_000, endMs: 1_500, text: "Use SAVE20" }
+      ]
+    };
 
-    expect(calculateReadiness(campaign, findings)).toEqual(
-      calculateReadiness(campaign, findings.toReversed())
+    expect(calculateReadiness(campaign, findings, processing, reviewContext)).toEqual(
+      calculateReadiness(campaign, findings.toReversed(), processing, reviewContext)
     );
-    expect(calculateReadiness(campaign, findings)).toMatchObject({
+    expect(calculateReadiness(campaign, findings, processing, reviewContext)).toMatchObject({
       score: 100,
       verdict: "ready"
     });
@@ -278,5 +290,87 @@ describe("readiness scoring", () => {
         "Discarded transcript evidence not found in cited segment: disclosure"
       ])
     );
+  });
+
+  it.each(["partial", "failed"] as const)(
+    "does not report ready when required transcript processing is %s",
+    (transcriptStatus) => {
+      const report = calculateReadiness(
+        campaign,
+        [
+          {
+            requirementId: "disclosure",
+            source: "transcript",
+            status: "satisfied",
+            startMs: 0,
+            endMs: 500,
+            excerpt: "This video is sponsored by Acme",
+            confidence: 1
+          },
+          {
+            requirementId: "promo",
+            source: "transcript",
+            status: "satisfied",
+            startMs: 500,
+            endMs: 1_000,
+            excerpt: "Use SAVE20",
+            confidence: 1
+          }
+        ],
+        {
+          transcriptStatus,
+          visualStatus: "failed",
+          modelAnalysisStatus: "complete"
+        },
+        {
+          durationMs: 1_000,
+          transcript: [
+            { startMs: 0, endMs: 500, text: "This video is sponsored by Acme" },
+            { startMs: 500, endMs: 1_000, text: "Use SAVE20" }
+          ]
+        }
+      );
+
+      expect(report.score).toBeLessThan(85);
+      expect(report.verdict).toBe("inconclusive");
+      expect(report.limitations).toContain(`Transcript processing is ${transcriptStatus}`);
+    }
+  );
+
+  it.each([
+    { verification: "visual" as const, source: "visual" as const },
+    { verification: "manual" as const, source: "manual" as const }
+  ])("requires complete $verification processing before ready", ({ verification, source }) => {
+    const streamCampaign: CampaignInput = {
+      campaignId: `${verification}-processing`,
+      name: `${verification} processing`,
+      requirements: [
+        {
+          id: "stream-check",
+          category: "custom",
+          description: "Complete the required stream check",
+          priority: "required",
+          verification,
+          polarity: "required"
+        }
+      ]
+    };
+    const report = calculateReadiness(
+      streamCampaign,
+      [
+        {
+          requirementId: "stream-check",
+          source,
+          status: "satisfied",
+          startMs: 0,
+          endMs: 100,
+          excerpt: "Observed evidence",
+          confidence: 1
+        }
+      ],
+      { transcriptStatus: "complete", visualStatus: "partial", modelAnalysisStatus: "skipped" },
+      { durationMs: 100, transcript: [] }
+    );
+    expect(report).toMatchObject({ score: 84, verdict: "inconclusive" });
   });
 });

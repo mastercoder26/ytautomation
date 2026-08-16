@@ -15,6 +15,7 @@
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "test:container": "node scripts/run-container-smoke.mjs",
     "test:coverage": "vitest run --coverage",
     "start:mcp": "tsx src/mcp/index.ts",
     "cli": "tsx src/cli.ts",

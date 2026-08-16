@@ -30,6 +30,7 @@ describe("offline campaign review", () => {
       transcript: [
         { startMs: 1_000, endMs: 2_000, text: "This is Made with Acme." }
       ],
+      durationMs: 5_000,
       visualEvidence: [
         {
           requirementId: "logo",
@@ -70,10 +71,46 @@ describe("offline campaign review", () => {
         ]
       },
       transcript: [],
+      durationMs: 5_000,
       visualEvidence: [],
       modelEvidence: []
     });
     expect(report).toMatchObject({ verdict: "needs_changes", processing: { transcriptStatus: "failed" } });
     expect(report.requirements[0]?.status).toBe("missed");
+  });
+
+  it("rejects evidence beyond the independently measured video duration", () => {
+    const report = reviewCampaign({
+      campaign: {
+        campaignId: "bounded-review",
+        name: "Bounded review",
+        requirements: [
+          {
+            id: "logo",
+            category: "visual_branding",
+            description: "Show the logo",
+            priority: "required",
+            verification: "visual",
+            polarity: "required"
+          }
+        ]
+      },
+      transcript: [],
+      durationMs: 2_000,
+      visualEvidence: [
+        {
+          requirementId: "logo",
+          source: "visual",
+          status: "satisfied",
+          startMs: 86_399_000,
+          endMs: 86_400_000,
+          excerpt: "Logo appears far beyond the video",
+          confidence: 1
+        }
+      ]
+    });
+
+    expect(report).toMatchObject({ score: 0, verdict: "inconclusive" });
+    expect(report.limitations).toContain("Discarded evidence outside reviewed duration: logo");
   });
 });

@@ -99,12 +99,20 @@ export const calculateReadiness = (
   const needsVisual = campaign.requirements.some(
     (item) => item.verification === "visual" || item.verification === "both"
   );
+  const needsManual = campaign.requirements.some((item) => item.verification === "manual");
   if (needsTranscript && processing.transcriptStatus !== "complete") {
     limitations.push(`Transcript processing is ${processing.transcriptStatus}`);
   }
   if (needsVisual && processing.visualStatus !== "complete") {
     limitations.push(`Visual processing is ${processing.visualStatus}`);
   }
+  if (needsManual && processing.modelAnalysisStatus !== "complete") {
+    limitations.push(`Model analysis is ${processing.modelAnalysisStatus}`);
+  }
+  const requiredProcessingIncomplete =
+    (needsTranscript && processing.transcriptStatus !== "complete") ||
+    (needsVisual && processing.visualStatus !== "complete") ||
+    (needsManual && processing.modelAnalysisStatus !== "complete");
 
   const requirements: RequirementResult[] = campaign.requirements.map((requirement) => {
     const matched = evidence
@@ -135,6 +143,7 @@ export const calculateReadiness = (
       item.priority === "required"
   );
   if (blockingMiss) score = Math.min(score, 49);
+  if (requiredProcessingIncomplete) score = Math.min(score, 84);
 
   const allUnverified = requirements.every((item) => item.status === "not_verifiable");
   const hasChanges = requirements.some((item) => item.status === "missed" || item.status === "at_risk");
@@ -142,9 +151,13 @@ export const calculateReadiness = (
     ? "blocked"
     : allUnverified
       ? "inconclusive"
-      : hasChanges || score < 85
+      : hasChanges
         ? "needs_changes"
-        : "ready";
+        : requiredProcessingIncomplete
+          ? "inconclusive"
+          : score < 85
+            ? "needs_changes"
+            : "ready";
 
   return {
     campaignId: campaign.campaignId,

@@ -40,6 +40,11 @@ describe("BrandPreflight CLI", () => {
         reviewContext: {
           durationMs: 2_000,
           transcript: [{ startMs: 1_000, endMs: 1_500, text: "SAVE20" }]
+        },
+        processing: {
+          transcriptStatus: "complete",
+          visualStatus: "failed",
+          modelAnalysisStatus: "complete"
         }
       })
     );
@@ -60,5 +65,43 @@ describe("BrandPreflight CLI", () => {
     });
     expect(exitCode).toBe(2);
     expect(errors.join(" ")).toContain("Unknown command");
+  });
+
+  it("issues approvals only into an explicitly selected private data directory", async () => {
+    const dataRoot = await mkdtemp(join(tmpdir(), "brandpreflight-cli-approval-"));
+    const assetRoot = await mkdtemp(join(tmpdir(), "brandpreflight-cli-campaign-"));
+    const campaignPath = join(assetRoot, "campaign.json");
+    await writeFile(
+      campaignPath,
+      JSON.stringify({
+        campaignId: "cli-campaign",
+        name: "CLI campaign",
+        requirements: [
+          {
+            id: "promo",
+            category: "promo_code",
+            description: "Say SAVE20",
+            priority: "required",
+            verification: "transcript",
+            polarity: "required"
+          }
+        ]
+      })
+    );
+    const output: string[] = [];
+    const approved = await runCli(
+      ["approve", "--campaign", campaignPath, "--root", assetRoot, "--data-dir", dataRoot],
+      { stdout: (value) => output.push(value), stderr: () => undefined }
+    );
+    expect(approved).toBe(0);
+    expect(JSON.parse(output.join(""))).toMatchObject({ approvalToken: expect.stringMatching(/^[a-f0-9]{64}$/) });
+
+    const errors: string[] = [];
+    const missingDirectory = await runCli(["approve", "--campaign", campaignPath, "--root", assetRoot], {
+      stdout: () => undefined,
+      stderr: (value) => errors.push(value)
+    });
+    expect(missingDirectory).toBe(1);
+    expect(errors.join(" ")).toContain("--data-dir");
   });
 });

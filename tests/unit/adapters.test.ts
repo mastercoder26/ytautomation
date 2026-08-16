@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readdir, symlink, writeFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, readdir, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -143,6 +143,25 @@ describe("media metadata and local transcription", () => {
     );
     expect(transcript).toEqual([{ startMs: 0, endMs: 500, text: "hello" }]);
   });
+
+  it("rejects oversized whisper JSON before reading it into host memory", async () => {
+    const root = await mkdtemp(join(tmpdir(), "brandpreflight-whisper-limit-"));
+    const outputPrefix = join(root, "transcript");
+    await expect(
+      transcribeWithWhisperCpp(
+        {
+          command: "whisper-cli",
+          modelPath: join(root, "model.bin"),
+          audioPath: join(root, "audio.wav"),
+          outputPrefix
+        },
+        async () => {
+          await writeFile(`${outputPrefix}.json`, Buffer.alloc(10_000_001, 32));
+          return { stdout: "", stderr: "", exitCode: 0 };
+        }
+      )
+    ).rejects.toThrow("size limit");
+  });
 });
 
 describe("bounded process execution", () => {
@@ -166,12 +185,19 @@ describe("bounded process execution", () => {
   });
 
   it("terminates a process that exceeds its deadline", async () => {
+    const root = await mkdtemp(join(tmpdir(), "brandpreflight-process-cleanup-"));
+    const marker = join(root, "cleanup-ran");
     await expect(
       runProcess(process.execPath, ["-e", "setInterval(() => {}, 1000)"], {
         timeoutMs: 20,
-        maxOutputBytes: 1_024
+        maxOutputBytes: 1_024,
+        terminationCleanup: {
+          command: process.execPath,
+          args: ["-e", "require('node:fs').writeFileSync(process.argv[1], 'yes')", marker]
+        }
       })
     ).rejects.toThrow("timed out");
+    await expect(access(marker)).resolves.toBeUndefined();
   });
 
   it("rejects non-zero exits and bounded-output violations", async () => {
@@ -209,6 +235,8 @@ describe("video preparation orchestration", () => {
 
     const result = await prepareVideo({
       videoPath,
+      campaignId: "campaign-prepare",
+      campaignDigest: "0".repeat(64),
       allowedRoots: [root],
       dataRoot,
       frameIntervalSeconds: 5,
@@ -233,7 +261,7 @@ describe("video preparation orchestration", () => {
     await expect(
       deleteArtifactDirectory(dataRoot, result.artifactDirectory, true)
     ).resolves.toEqual({ deleted: result.artifactDirectory });
-    expect(await readdir(dataRoot)).toEqual([]);
+    expect(await readdir(dataRoot)).toEqual([".manifest-key"]);
     await expect(deleteArtifactDirectory(dataRoot, "../outside", true)).rejects.toThrow(
       "Invalid artifact identifier"
     );
@@ -260,6 +288,7 @@ describe("video preparation orchestration", () => {
       ffprobe: false,
       whisperCpp: true,
       whisperModelConfigured: true,
+      mediaSandboxConfigured: false,
       networkUsed: false
     });
   });
@@ -270,6 +299,8 @@ describe("video preparation orchestration", () => {
     await writeFile(videoPath, "fixture");
     const result = await prepareVideo({
       videoPath,
+      campaignId: "campaign-local",
+      campaignDigest: "0".repeat(64),
       allowedRoots: [root],
       dataRoot: join(root, "artifacts"),
       dependencies: {
@@ -299,6 +330,8 @@ describe("video preparation orchestration", () => {
     await expect(
       prepareVideo({
         videoPath,
+        campaignId: "campaign-symlink",
+        campaignDigest: "0".repeat(64),
         allowedRoots: [root],
         dataRoot: linkedArtifacts
       })
@@ -307,6 +340,8 @@ describe("video preparation orchestration", () => {
     await expect(
       prepareVideo({
         videoPath,
+        campaignId: "campaign-failure",
+        campaignDigest: "0".repeat(64),
         allowedRoots: [root],
         dataRoot: realArtifacts,
         dependencies: {

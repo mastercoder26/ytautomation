@@ -1,17 +1,20 @@
 import { McpServer } from "@modelcontextprotocol/server";
+import { lstatSync, mkdirSync, realpathSync } from "node:fs";
+import { relative, resolve, sep } from "node:path";
 import { z } from "zod";
 import { extractRequirementCandidates } from "../brief/extract.js";
 import { extractPdfText } from "../brief/pdf.js";
 import { buildAnalysisEnvelope } from "../byom/envelope.js";
+import { consumeShareApproval } from "../consent/approval.js";
 import { calculateReadiness } from "../domain/scoring.js";
+import { digestCampaign } from "../domain/campaign-binding.js";
 import {
   campaignInputSchema,
-  evidenceSchema,
-  processingStatusSchema,
-  reviewContextSchema,
-  transcriptSegmentSchema
+  evidenceSchema
 } from "../domain/schemas.js";
-import { doctorLocalTools, prepareVideo } from "../media/prepare.js";
+import { loadArtifactReview } from "../media/manifest.js";
+import { doctorLocalTools, prepareVideo, type PreparedVideo } from "../media/prepare.js";
+import type { MediaContainerConfig } from "../media/container.js";
 
 export type BrandPreflightServerOptions = {
   allowedRoots: readonly string[];
@@ -20,12 +23,8 @@ export type BrandPreflightServerOptions = {
   ffprobeCommand?: string;
   whisperCommand?: string;
   whisperModelPath?: string;
+  mediaContainer?: MediaContainerConfig;
 };
-
-const success = (value: Record<string, unknown>) => ({
-  content: [{ type: "text" as const, text: JSON.stringify(value, null, 2) }],
-  structuredContent: value
-});
 
 const failure = (error: unknown) => ({
   isError: true,
@@ -39,6 +38,30 @@ const failure = (error: unknown) => ({
     }
   ]
 });
+
+const MAX_MCP_CONTENT_BYTES = 2_000_000;
+const MAX_MCP_RESPONSE_BYTES = 4_000_000;
+
+const success = (value: Record<string, unknown>) => {
+  const serialized = JSON.stringify(value, null, 2);
+  if (Buffer.byteLength(serialized, "utf8") > MAX_MCP_RESPONSE_BYTES) {
+    return failure(new Error("MCP response exceeds the configured size limit"));
+  }
+  return {
+    content: [{ type: "text" as const, text: serialized }],
+    structuredContent: value
+  };
+};
+
+const addAggregateSizeIssue = (
+  context: z.core.$RefinementCtx,
+  values: readonly string[]
+): void => {
+  const bytes = values.reduce((total, value) => total + Buffer.byteLength(value, "utf8"), 0);
+  if (bytes > MAX_MCP_CONTENT_BYTES) {
+    context.addIssue({ code: "custom", message: "Aggregate MCP text exceeds the 2 MB limit" });
+  }
+};
 
 const extractInputSchema = z
   .object({
@@ -60,7 +83,68 @@ const visualObservationSchema = z
   })
   .strict();
 
+const reviewPacketInputSchema = z
+  .object({
+    campaign: campaignInputSchema,
+    artifactId: z.string().regex(/^job-[a-zA-Z0-9_-]{6,64}$/),
+    visualObservations: z.array(visualObservationSchema).max(500),
+    approvalToken: z.string().regex(/^[a-f0-9]{64}$/)
+  })
+  .strict()
+  .superRefine((value, context) =>
+    addAggregateSizeIssue(context, [
+      ...value.campaign.requirements.flatMap((item) => [item.description, item.exactText ?? ""]),
+      ...value.visualObservations.map((item) => item.description)
+    ])
+  );
+
+const scoreInputSchema = z
+  .object({
+    campaign: campaignInputSchema,
+    evidence: z.array(evidenceSchema).max(2_000),
+    artifactId: z.string().regex(/^job-[a-zA-Z0-9_-]{6,64}$/)
+  })
+  .strict()
+  .superRefine((value, context) =>
+    addAggregateSizeIssue(context, [
+      ...value.campaign.requirements.flatMap((item) => [item.description, item.exactText ?? ""]),
+      ...value.evidence.map((item) => item.excerpt)
+    ])
+  );
+
+const isInsideOrEqual = (candidate: string, root: string): boolean => {
+  const fromRoot = relative(resolve(root), resolve(candidate));
+  return fromRoot === "" || (fromRoot !== ".." && !fromRoot.startsWith(`..${sep}`));
+};
+
+const canonicalDataRoot = (path: string): string => {
+  const resolved = resolve(path);
+  mkdirSync(resolved, { recursive: true, mode: 0o700 });
+  const stats = lstatSync(resolved);
+  if (stats.isSymbolicLink() || !stats.isDirectory()) {
+    throw new Error("MCP artifact data root must be a real directory, not a symbolic link");
+  }
+  return realpathSync(resolved);
+};
+
+export const summarizePreparedVideoForMcp = (
+  prepared: PreparedVideo,
+  campaignId: string
+): Record<string, unknown> => ({
+  artifactId: prepared.artifactDirectory,
+  campaignId,
+  durationMs: prepared.metadata.durationMs,
+  transcriptStatus: prepared.transcriptStatus,
+  frameCount: prepared.frames.length,
+  limitations: prepared.limitations
+});
+
 export const buildBrandPreflightServer = (options: BrandPreflightServerOptions): McpServer => {
+  const dataRoot = canonicalDataRoot(options.dataRoot ?? ".brandpreflight");
+  const canonicalAllowedRoots = options.allowedRoots.map((root) => realpathSync(resolve(root)));
+  if (canonicalAllowedRoots.some((root) => isInsideOrEqual(dataRoot, root))) {
+    throw new Error("MCP artifact data must be outside every model-accessible workspace root");
+  }
   const server = new McpServer(
     { name: "brandpreflight", version: "0.1.0" },
     {
@@ -83,7 +167,8 @@ export const buildBrandPreflightServer = (options: BrandPreflightServerOptions):
     },
     async ({ campaignId, name, briefText, pdfPath }) => {
       try {
-        const source = briefText ?? (await extractPdfText(pdfPath ?? "", options.allowedRoots)).text;
+        const source = briefText ??
+          (await extractPdfText(pdfPath ?? "", options.allowedRoots, undefined, options.mediaContainer)).text;
         return success({
           campaignId,
           name,
@@ -99,38 +184,48 @@ export const buildBrandPreflightServer = (options: BrandPreflightServerOptions):
     "brandpreflight_build_review_packet",
     {
       description: "Build a prompt-injection-resistant BYOM review packet from requirements and local evidence.",
-      inputSchema: z
-        .object({
-          campaign: campaignInputSchema,
-          transcript: z.array(transcriptSegmentSchema).max(20_000),
-          visualObservations: z.array(visualObservationSchema).max(1_000),
-          consent: z
-            .object({ shareWithCurrentMcpHost: z.boolean() })
-            .strict()
-        })
-        .strict()
+      inputSchema: reviewPacketInputSchema
     },
-    async ({ campaign, transcript, visualObservations, consent }) =>
-      consent.shareWithCurrentMcpHost
-        ? success(
-            buildAnalysisEnvelope({
-              requirements: campaign.requirements,
-              transcript,
-              visualObservations
-            })
-          )
-        : {
+    async ({ campaign, artifactId, visualObservations, approvalToken }) => {
+      try {
+        const campaignDigest = digestCampaign(campaign);
+        const approved = await consumeShareApproval(
+          dataRoot,
+          campaign.campaignId,
+          campaignDigest,
+          approvalToken
+        );
+        if (!approved) {
+          return {
             isError: true,
             content: [
               {
                 type: "text" as const,
                 text: JSON.stringify({
                   code: "CONSENT_REQUIRED",
-                  message: "Explicit consent is required before sharing review evidence with the MCP host model"
+                  message: "Use a fresh, campaign-scoped approval token issued outside the MCP host"
                 })
               }
             ]
-          }
+          };
+        }
+        const { reviewContext } = await loadArtifactReview(
+          dataRoot,
+          artifactId,
+          campaign.campaignId,
+          campaignDigest
+        );
+        return success(
+          buildAnalysisEnvelope({
+            requirements: campaign.requirements,
+            transcript: reviewContext.transcript,
+            visualObservations
+          })
+        );
+      } catch (error) {
+        return failure(error);
+      }
+    }
   );
 
   server.registerTool(
@@ -140,26 +235,30 @@ export const buildBrandPreflightServer = (options: BrandPreflightServerOptions):
         "Probe a local video, extract bounded frames/audio with FFmpeg, and optionally transcribe with a configured local whisper.cpp binary.",
       inputSchema: z
         .object({
+          campaign: campaignInputSchema,
           videoPath: z.string().min(1).max(4_096),
           frameIntervalSeconds: z.number().int().min(1).max(300).optional(),
           language: z.string().min(2).max(20).optional()
         })
         .strict()
     },
-    async ({ videoPath, frameIntervalSeconds, language }) => {
+    async ({ campaign, videoPath, frameIntervalSeconds, language }) => {
       try {
         const prepared = await prepareVideo({
           videoPath,
+          campaignId: campaign.campaignId,
+          campaignDigest: digestCampaign(campaign),
           allowedRoots: options.allowedRoots,
-          dataRoot: options.dataRoot ?? ".brandpreflight",
-          ...(frameIntervalSeconds ? { frameIntervalSeconds } : {}),
-          ...(options.ffmpegCommand ? { ffmpegCommand: options.ffmpegCommand } : {}),
-          ...(options.ffprobeCommand ? { ffprobeCommand: options.ffprobeCommand } : {}),
-          ...(options.whisperCommand ? { whisperCommand: options.whisperCommand } : {}),
-          ...(options.whisperModelPath ? { whisperModelPath: options.whisperModelPath } : {}),
-          ...(language ? { language } : {})
+          dataRoot,
+          frameIntervalSeconds,
+          ffmpegCommand: options.ffmpegCommand,
+          ffprobeCommand: options.ffprobeCommand,
+          whisperCommand: options.whisperCommand,
+          whisperModelPath: options.whisperModelPath,
+          mediaContainer: options.mediaContainer,
+          language
         });
-        return success(prepared as unknown as Record<string, unknown>);
+        return success(summarizePreparedVideoForMcp(prepared, campaign.campaignId));
       } catch (error) {
         return failure(error);
       }
@@ -170,19 +269,23 @@ export const buildBrandPreflightServer = (options: BrandPreflightServerOptions):
     "brandpreflight_score",
     {
       description: "Validate evidence and calculate the deterministic Campaign Readiness Score.",
-      inputSchema: z
-        .object({
-          campaign: campaignInputSchema,
-          evidence: z.array(evidenceSchema).max(5_000),
-          processing: processingStatusSchema.optional(),
-          reviewContext: reviewContextSchema
-        })
-        .strict()
+      inputSchema: scoreInputSchema
     },
-    async ({ campaign, evidence, processing, reviewContext }) =>
-      success(
-        calculateReadiness(campaign, evidence, processing, reviewContext) as unknown as Record<string, unknown>
-      )
+    async ({ campaign, evidence, artifactId }) => {
+      try {
+        const { processing, reviewContext } = await loadArtifactReview(
+          dataRoot,
+          artifactId,
+          campaign.campaignId,
+          digestCampaign(campaign)
+        );
+        return success(
+          calculateReadiness(campaign, evidence, processing, reviewContext) as unknown as Record<string, unknown>
+        );
+      } catch (error) {
+        return failure(error);
+      }
+    }
   );
 
   server.registerPrompt(

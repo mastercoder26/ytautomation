@@ -53,8 +53,12 @@ export const parseProbeJson = (raw: string): VideoMetadata => {
   };
 };
 
-export const probeVideo = async (inputPath: string, ffprobeCommand = "ffprobe"): Promise<VideoMetadata> => {
-  const result = await runProcess(ffprobeCommand, buildProbeArgs(inputPath), {
+export const probeVideo = async (
+  inputPath: string,
+  ffprobeCommand = "ffprobe",
+  runner: typeof runProcess = runProcess
+): Promise<VideoMetadata> => {
+  const result = await runner(ffprobeCommand, buildProbeArgs(inputPath), {
     timeoutMs: 15_000,
     maxOutputBytes: 2_000_000,
     env: safeNativeEnvironment()

@@ -5,7 +5,9 @@ import { z } from "zod";
 import { extractRequirementCandidates } from "./brief/extract.js";
 import { extractPdfText } from "./brief/pdf.js";
 import { buildAnalysisEnvelope } from "./byom/envelope.js";
+import { issueShareApproval } from "./consent/approval.js";
 import { calculateReadiness } from "./domain/scoring.js";
+import { digestCampaign } from "./domain/campaign-binding.js";
 import {
   campaignInputSchema,
   evidenceSchema,
@@ -16,6 +18,7 @@ import {
 import { doctorLocalTools, prepareVideo } from "./media/prepare.js";
 import { readImportedFile } from "./media/file-policy.js";
 import { deleteArtifactDirectory } from "./media/artifacts.js";
+import type { MediaContainerConfig } from "./media/container.js";
 
 export type CliIo = {
   stdout: (value: string) => void;
@@ -31,8 +34,9 @@ const help = `BrandPreflight local sponsored-content QA
 
 Commands:
   doctor
+  approve --campaign FILE --root DIR --data-dir DIR
   brief --text FILE|--pdf FILE --campaign-id ID --name NAME --root DIR
-  prepare --video FILE --root DIR [--data-dir DIR] [--frame-interval SECONDS]
+  prepare --campaign FILE --video FILE --root DIR --data-dir DIR [--frame-interval SECONDS]
   packet --input FILE --root DIR
   score --input FILE --root DIR
   clean --artifact ID --data-dir DIR --yes true
@@ -91,6 +95,13 @@ const scoreInputSchema = z
   })
   .strict();
 
+const configuredMediaContainer = (): MediaContainerConfig | undefined => {
+  const mediaRuntime = process.env.BRANDPREFLIGHT_MEDIA_RUNTIME;
+  return (mediaRuntime === "docker" || mediaRuntime === "podman") && process.env.BRANDPREFLIGHT_MEDIA_IMAGE
+    ? { runtime: mediaRuntime, image: process.env.BRANDPREFLIGHT_MEDIA_IMAGE }
+    : undefined;
+};
+
 export const runCli = async (argv: readonly string[], io: CliIo = defaultIo): Promise<number> => {
   const [command, ...rest] = argv;
   if (!command || command === "help" || command === "--help" || command === "-h") {
@@ -117,6 +128,22 @@ export const runCli = async (argv: readonly string[], io: CliIo = defaultIo): Pr
       return 0;
     }
 
+    if (command === "approve") {
+      const root = resolve(requireFlag(flags, "root"));
+      const campaign = campaignInputSchema.parse(
+        await readJson(requireFlag(flags, "campaign"), root)
+      );
+      printJson(
+        io,
+        await issueShareApproval(
+          resolve(requireFlag(flags, "data-dir")),
+          campaign.campaignId,
+          digestCampaign(campaign)
+        )
+      );
+      return 0;
+    }
+
     if (command === "brief") {
       const textPath = flags.get("text");
       const pdfPath = flags.get("pdf");
@@ -125,7 +152,7 @@ export const runCli = async (argv: readonly string[], io: CliIo = defaultIo): Pr
       const root = resolve(requireFlag(flags, "root"));
       const briefText = textPath
         ? (await readImportedFile(sourcePath, [root], "text")).data.toString("utf8")
-        : (await extractPdfText(sourcePath, [root])).text;
+        : (await extractPdfText(sourcePath, [root], undefined, configuredMediaContainer())).text;
       printJson(io, {
         campaignId: requireFlag(flags, "campaign-id"),
         name: requireFlag(flags, "name"),
@@ -137,13 +164,19 @@ export const runCli = async (argv: readonly string[], io: CliIo = defaultIo): Pr
     if (command === "prepare") {
       const videoPath = resolve(requireFlag(flags, "video"));
       const root = resolve(requireFlag(flags, "root"));
+      const campaign = campaignInputSchema.parse(
+        await readJson(requireFlag(flags, "campaign"), root)
+      );
       const frameInterval = flags.get("frame-interval");
+      const mediaContainer = configuredMediaContainer();
       printJson(
         io,
         await prepareVideo({
           videoPath,
+          campaignId: campaign.campaignId,
+          campaignDigest: digestCampaign(campaign),
           allowedRoots: [root],
-          dataRoot: resolve(flags.get("data-dir") ?? ".brandpreflight"),
+          dataRoot: resolve(requireFlag(flags, "data-dir")),
           ...(frameInterval ? { frameIntervalSeconds: Number(frameInterval) } : {}),
           ...(process.env.BRANDPREFLIGHT_FFMPEG ? { ffmpegCommand: process.env.BRANDPREFLIGHT_FFMPEG } : {}),
           ...(process.env.BRANDPREFLIGHT_FFPROBE ? { ffprobeCommand: process.env.BRANDPREFLIGHT_FFPROBE } : {}),
@@ -152,7 +185,8 @@ export const runCli = async (argv: readonly string[], io: CliIo = defaultIo): Pr
             : {}),
           ...(process.env.BRANDPREFLIGHT_WHISPER_MODEL
             ? { whisperModelPath: process.env.BRANDPREFLIGHT_WHISPER_MODEL }
-            : {})
+            : {}),
+          ...(mediaContainer ? { mediaContainer } : {})
         })
       );
       return 0;

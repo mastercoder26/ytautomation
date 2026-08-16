@@ -1,6 +1,4 @@
-import { access } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { buildPdfContainerInvocation, type MediaContainerConfig } from "../media/container.js";
 import { readImportedFile } from "../media/file-policy.js";
 import { runProcess } from "../media/process.js";
 
@@ -10,37 +8,19 @@ export type PdfTextParser = (data: Uint8Array) => Promise<PdfTextResult>;
 const MAX_PAGES = 500;
 const MAX_TEXT_BYTES = 2_000_000;
 
-const defaultParser: PdfTextParser = async (data) => {
-  const compiledWorkerPath = fileURLToPath(new URL("./pdf-worker.js", import.meta.url));
-  const sourceWorkerPath = fileURLToPath(new URL("./pdf-worker.ts", import.meta.url));
-  const usingCompiledWorker = await access(compiledWorkerPath).then(
-    () => true,
-    () => false
-  );
-  const workerPath = usingCompiledWorker ? compiledWorkerPath : sourceWorkerPath;
-  const moduleRoot = resolve(dirname(workerPath), "..");
-  const packageRoot = resolve(moduleRoot, "..");
-  const nodeModules = resolve(packageRoot, "node_modules");
-  const nodeMajor = Number(process.versions.node.split(".")[0]);
-  if (!usingCompiledWorker && nodeMajor < 22) {
-    throw new Error("The restricted PDF worker requires npm run build on Node.js 20");
-  }
-  const permissionFlag = nodeMajor >= 22 ? "--permission" : "--experimental-permission";
+const containerParser = async (
+  data: Uint8Array,
+  mediaContainer: MediaContainerConfig
+): Promise<PdfTextResult> => {
+  const restricted = buildPdfContainerInvocation(mediaContainer);
   const result = await runProcess(
-    process.execPath,
-    [
-      permissionFlag,
-      "--allow-addons",
-      `--allow-fs-read=${moduleRoot}`,
-      `--allow-fs-read=${nodeModules}`,
-      `--allow-fs-read=${resolve(packageRoot, "package.json")}`,
-      ...(usingCompiledWorker ? [] : ["--experimental-strip-types"]),
-      workerPath
-    ],
+    restricted.command,
+    restricted.args,
     {
       timeoutMs: 30_000,
       maxOutputBytes: MAX_TEXT_BYTES + 100_000,
       stdin: data,
+      terminationCleanup: restricted.terminationCleanup,
       env: {
         PATH: process.env.PATH ?? "",
         NODE_NO_WARNINGS: "1",
@@ -54,12 +34,16 @@ const defaultParser: PdfTextParser = async (data) => {
 export const extractPdfText = async (
   pdfPath: string,
   allowedRoots: readonly string[],
-  parser: PdfTextParser = defaultParser
+  parser?: PdfTextParser,
+  mediaContainer?: MediaContainerConfig
 ): Promise<PdfTextResult> => {
   const { data } = await readImportedFile(pdfPath, allowedRoots, "pdf");
   if (data.subarray(0, 5).toString("ascii") !== "%PDF-") throw new Error("File is not a valid PDF");
 
-  const result = await parser(data);
+  if (!parser && !mediaContainer) {
+    throw new Error("PDF extraction requires a pinned Docker/Podman sandbox image");
+  }
+  const result = await (parser ?? ((input) => containerParser(input, mediaContainer as MediaContainerConfig)))(data);
   if (!Number.isInteger(result.pages) || result.pages < 1 || result.pages > MAX_PAGES) {
     throw new Error(`PDF page limit exceeded (maximum ${MAX_PAGES})`);
   }

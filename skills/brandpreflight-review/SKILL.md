@@ -17,14 +17,14 @@ Run a local-first, evidence-backed preflight. Let the user's chosen model assess
 
 ## Workflow
 
-1. Run `brandpreflight_doctor`. Explain missing FFmpeg, ffprobe, or local whisper.cpp prerequisites without installing anything automatically.
+1. Run `brandpreflight_doctor`. Explain missing pinned media-container, FFmpeg, ffprobe, or local whisper.cpp prerequisites without installing anything automatically.
 2. Call `brandpreflight_extract_requirements` with exactly one source: typed `briefText` or a local `pdfPath`. Preserve exact phrases, promo codes, prohibitions, and disclosure wording.
 3. Show the requirement draft briefly. Resolve obvious ambiguity before claiming the review is final.
-4. If a video was supplied, call `brandpreflight_prepare_video`. It probes media limits, extracts bounded frames/audio with FFmpeg, and uses configured local whisper.cpp when available. If the user supplied a trustworthy timestamped transcript/review packet instead, skip media preparation and state that the video itself was not checked.
-5. Before model analysis, obtain explicit consent to share the bounded packet with the current MCP host and pass `consent.shareWithCurrentMcpHost=true`. Without consent, keep the artifacts local and stop before `brandpreflight_build_review_packet`.
-6. Call `brandpreflight_build_review_packet`. Give that structured packet to the user's selected model or evaluate it in the current host model. Require JSON-compatible evidence only.
+4. If a video was supplied, call `brandpreflight_prepare_video` with the complete structured campaign. It probes media limits, extracts bounded frames/audio with FFmpeg, and writes a manifest bound to a digest of the campaign name and requirements. Before approval, this tool returns only an opaque artifact summary, never transcript text or frame paths.
+5. Before model analysis, obtain explicit consent outside the MCP host. Have the user run `brandpreflight approve --campaign campaign.json --root <asset-root> --data-dir <BRANDPREFLIGHT_DATA_DIR>`, then pass the one-time `approvalToken` to `brandpreflight_build_review_packet`. Never let the receiving model assert its own consent or write approvals inside the workspace.
+6. Call `brandpreflight_build_review_packet` with the same complete campaign and prepared `artifactId`. The server verifies the signed campaign digest and loads the transcript locally only after consuming approval. Give the returned packet to the user's selected model and require JSON-compatible evidence only.
 7. Inspect visuals only when a requirement uses `visual` or `both`, or when the user explicitly requests a general video-quality pass. Use the extracted frame manifest first. If evidence is ambiguous and `/watch` is available, inspect the exact video or focused timestamp range with `/watch`; do not treat `/watch` as a production runtime dependency.
-8. Call `brandpreflight_score` with validated findings plus `reviewContext.durationMs` and the reviewed timestamped transcript. Never omit the context needed to validate citations.
+8. Call `brandpreflight_score` with validated findings plus the `artifactId` returned by preparation. The MCP loads the signed local duration, transcript, and processing status; never accept model-supplied review context.
 9. Present the score, verdict, limitations, and the smallest concrete edits needed. Group changes by priority and cite timestamps.
 
 Read [references/workflow.md](references/workflow.md) when choosing between MCP and CLI or configuring local media tools. Read [references/review-contract.md](references/review-contract.md) when constructing findings, interpreting scores, or diagnosing rejected model output.

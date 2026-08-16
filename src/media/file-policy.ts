@@ -4,12 +4,14 @@ import { extname, relative, resolve, sep } from "node:path";
 
 const EXTENSIONS = {
   video: new Set([".mp4", ".mov", ".mkv", ".webm", ".m4v"]),
+  model: new Set([".bin", ".gguf"]),
   pdf: new Set([".pdf"]),
   text: new Set([".txt", ".md"]),
   json: new Set([".json"])
 };
 const MAX_BYTES = {
-  video: 2_000_000_000,
+  video: 500_000_000,
+  model: 2_000_000_000,
   pdf: 50_000_000,
   text: 500_000,
   json: 10_000_000

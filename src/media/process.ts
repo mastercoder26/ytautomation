@@ -1,4 +1,5 @@
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
+import { lstat, readdir } from "node:fs/promises";
 
 export type ProcessOptions = {
   timeoutMs: number;
@@ -6,6 +7,8 @@ export type ProcessOptions = {
   cwd?: string;
   stdin?: string | Uint8Array;
   env?: NodeJS.ProcessEnv;
+  writeBudget?: { paths: readonly string[]; maxBytes: number };
+  terminationCleanup?: { command: string; args: readonly string[] };
 };
 
 export type ProcessResult = { stdout: string; stderr: string; exitCode: number };
@@ -19,7 +22,7 @@ export const safeNativeEnvironment = (): NodeJS.ProcessEnv => ({
 });
 
 export class ProcessExecutionError extends Error {
-  readonly code: "TIMEOUT" | "OUTPUT_LIMIT" | "NON_ZERO_EXIT" | "SPAWN_FAILED";
+  readonly code: "TIMEOUT" | "OUTPUT_LIMIT" | "WRITE_LIMIT" | "NON_ZERO_EXIT" | "SPAWN_FAILED";
   readonly stderr: string;
 
   constructor(code: ProcessExecutionError["code"], message: string, stderr = "") {
@@ -46,6 +49,21 @@ export const runProcess = (
     let stdout = "";
     let stderr = "";
     let settled = false;
+    let budgetTimer: NodeJS.Timeout | undefined;
+
+    const pathBytes = async (path: string): Promise<number> => {
+      try {
+        const stats = await lstat(path);
+        if (stats.isSymbolicLink()) return 0;
+        if (stats.isFile()) return stats.size;
+        if (!stats.isDirectory()) return 0;
+        const children = await readdir(path);
+        const sizes = await Promise.all(children.map((childPath) => pathBytes(`${path}/${childPath}`)));
+        return sizes.reduce((sum, size) => sum + size, 0);
+      } catch {
+        return 0;
+      }
+    };
 
     const terminate = (): void => {
       if (process.platform !== "win32" && child.pid) {
@@ -59,11 +77,23 @@ export const runProcess = (
       child.kill("SIGKILL");
     };
 
+    const terminateExternalResource = (): void => {
+      if (!options.terminationCleanup) return;
+      spawnSync(options.terminationCleanup.command, [...options.terminationCleanup.args], {
+        shell: false,
+        stdio: "ignore",
+        timeout: 5_000,
+        ...(options.env ? { env: options.env } : {})
+      });
+    };
+
     const settleError = (error: Error): void => {
       if (settled) return;
       settled = true;
       clearTimeout(timeout);
+      if (budgetTimer) clearInterval(budgetTimer);
       terminate();
+      terminateExternalResource();
       rejectPromise(error);
     };
 
@@ -89,6 +119,7 @@ export const runProcess = (
       if (settled) return;
       settled = true;
       clearTimeout(timeout);
+      if (budgetTimer) clearInterval(budgetTimer);
       if (exitCode !== 0) {
         rejectPromise(
           new ProcessExecutionError("NON_ZERO_EXIT", `Process exited with code ${exitCode ?? -1}`, stderr)
@@ -102,4 +133,18 @@ export const runProcess = (
       settleError(new ProcessExecutionError("TIMEOUT", "Process timed out"));
     }, options.timeoutMs);
     timeout.unref();
+    if (options.writeBudget) {
+      let checking = false;
+      budgetTimer = setInterval(() => {
+        if (checking || settled) return;
+        checking = true;
+        void Promise.all(options.writeBudget?.paths.map(pathBytes) ?? []).then((sizes) => {
+          checking = false;
+          if (sizes.reduce((sum, size) => sum + size, 0) > (options.writeBudget?.maxBytes ?? 0)) {
+            settleError(new ProcessExecutionError("WRITE_LIMIT", "Process exceeded the artifact write budget"));
+          }
+        });
+      }, 100);
+      budgetTimer.unref();
+    }
   });

@@ -6,16 +6,16 @@ BrandPreflight uses `@modelcontextprotocol/server` v2 over stdio. The entry poin
 
 - `brandpreflight_doctor`: check local prerequisites without network calls.
 - `brandpreflight_extract_requirements`: parse typed brief text or a PDF within the allowed root.
-- `brandpreflight_prepare_video`: probe, extract audio/frames, and optionally invoke local whisper.cpp.
+- `brandpreflight_prepare_video`: bind the artifact to a digest of the complete campaign, prepare local media, and return only an opaque pre-approval summary.
 - `brandpreflight_build_review_packet`: create the untrusted-data BYOM envelope.
 - `brandpreflight_score`: validate evidence and calculate the score.
 
-Building a model packet requires `consent.shareWithCurrentMcpHost=true`. Scoring requires `reviewContext.durationMs` and `reviewContext.transcript` so evidence timestamps and excerpts can be checked.
+Building a model packet requires a fresh campaign-digest-scoped approval token issued by the local CLI into the same external `BRANDPREFLIGHT_DATA_DIR`. Tokens expire and are consumed once. The packet tool loads transcript text from the signed artifact only after approval; callers cannot supply transcript text themselves. Scoring requires the prepared `artifactId`, and rejects any changed campaign name or requirements.
 
-All input schemas are strict Zod objects. Unknown fields are rejected by the MCP SDK before the handler runs.
+All input schemas are strict Zod objects. Unknown fields are rejected, aggregate tool text is limited to 2 MB, serialized responses are limited to 4 MB, and the stdio transport closes above 2.5 MB.
 
 ## Local policy
 
-`BRANDPREFLIGHT_WORKSPACE_ROOT` constrains imported PDFs/videos. `BRANDPREFLIGHT_DATA_DIR` constrains generated artifacts. Executable/model paths are read only from environment configuration, not MCP requests.
+`BRANDPREFLIGHT_WORKSPACE_ROOT` constrains imported PDFs/videos. `BRANDPREFLIGHT_DATA_DIR` constrains generated artifacts and must be outside every model-accessible workspace root so the host cannot read signing keys or rewrite manifests. Executable/model paths are read only from environment configuration, not MCP requests.
 
-The server is intentionally stateless in the MVP. Clients pass structured campaigns and evidence between calls, which makes results auditable and avoids cross-campaign artifact leakage.
+The server keeps only local private artifacts, signed manifests, and short-lived one-time approvals under the configured data directory. Clients pass campaigns and proposed evidence, but cannot replace the trusted review context.
