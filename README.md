@@ -1,4 +1,5 @@
 # BrandPreflight
+<img width="2527" height="995" alt="image" src="https://github.com/user-attachments/assets/eb6c7cd8-6551-465c-8faf-52dd1d704837" />
 
 BrandPreflight is the scoring and report layer for sponsored-video reviews. It validates agent-collected evidence, calculates the score, and saves a signed report.
 
