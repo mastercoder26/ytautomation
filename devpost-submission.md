@@ -2,64 +2,66 @@
 
 > Review a finished sponsored video against its campaign brief and get a timestamped, evidence-backed readiness report before delivery.
 
+[Live setup site](https://brandpreflight.vercel.app) | [Source code and run instructions](https://github.com/mastercoder26/ytautomation)
+
 ## Inspiration
 
 The edit is locked, the upload is scheduled, and then the final questions begin. Was the sponsorship disclosed clearly? Did the creator use the approved claim? Was the promo code shown correctly? Did captions cover a required logo?
 
-Answering those questions often means scrubbing through the video while cross-referencing a dense campaign brief. It is repetitive work at the exact point when a missed detail is most expensive to fix. A single oversight can lead to another review cycle, another export, or a delayed post.
+Answering those questions often means scrubbing through the video while cross-referencing a dense campaign brief. It is repetitive creator work at the exact point when a small oversight can cause another review cycle, another export, or a delayed post.
 
-We built BrandPreflight to automate that last manual comparison. It gives creators and editors a practical preflight before a sponsored video leaves their hands, so they can spend less time checking boxes and more time making content.
+We built BrandPreflight to automate that last manual comparison. It gives creators and editors a practical preflight before a sponsored video leaves their hands, while there is still time to fix it.
 
 ## What it does
 
-BrandPreflight reviews a completed sponsored video against its campaign brief and turns the result into a clear action list.
+BrandPreflight turns a campaign brief and finished video into a scored, actionable review.
 
-A creator starts on the BrandPreflight website, selects their coding agent, and copies one setup prompt. The agent installs the local skill and CLI, completes the setup, and is ready to review. The creator then provides only two files: the campaign brief and the finished video.
+A creator opens the setup site, selects their coding agent, and copies one prompt. The agent installs the BrandPreflight skill and CLI, completes the local setup, and asks for only two inputs: the campaign brief and the finished video.
 
-The agent extracts the campaign requirements and uses its video-review capability to inspect captions, transcript segments, and timestamped frames. It looks for the details that matter in sponsored content, including disclosures, approved claims, prohibited claims, branding, calls to action, promo codes, and exact wording.
+The agent extracts requirements from the brief and uses its video-review capability to inspect captions, transcript segments, and timestamped frames. It checks for disclosures, approved and prohibited claims, branding, calls to action, promo codes, and exact wording. It returns findings in a strict format with a requirement ID, status, evidence source, time range, observation, and confidence.
 
-The agent proposes evidence, but it does not decide the final result. BrandPreflight accepts only findings with known requirement IDs, allowed evidence sources, bounded timestamps, and valid statuses. When the review uses its prepared-media pipeline, it also checks transcript evidence and visual timestamps against signed local artifact data. Unsupported findings are discarded. Missing transcript or visual coverage is recorded as a limitation, never treated as a pass.
+BrandPreflight validates the findings against the known campaign requirements and evidence contract. It then applies a deterministic scoring model, produces a 0 to 100 Campaign Readiness Score and verdict, and saves a signed local report. The report shows what passed, what needs attention, what could not be verified, and a recommended edit for each missed or at-risk item.
 
-BrandPreflight then calculates a deterministic 0 to 100 Campaign Readiness Score, assigns a verdict, recommends the smallest useful edits, and saves a signed local report. Each result shows what passed, what needs attention, where the evidence appears in the video, and how confident the review can be.
+The result is a real working output, not a generated summary. Each run creates a review ID, a deterministic score and verdict, a signed report, and a command that opens the results in a local browser.
 
 ## How we built it
 
-We built the working implementation during the hackathon window, starting with executable tests for the scoring and evidence contracts. BrandPreflight is written in TypeScript as a local-first CLI and MCP server, with a Vite and React setup site that gives creators a copyable prompt for Codex, Claude Code, Cursor, or another coding agent. The CLI and MCP server share the same validation, scoring, and reporting modules, so the result does not change with the interface used to run the review.
+We built the working implementation during the hackathon window, starting with executable tests for the evidence and scoring contracts. The core is written in TypeScript as a local-first CLI. It also includes an MCP server implementation for structured agent integrations, plus a Vite and React setup site that generates prompts for Codex, Claude Code, Cursor, and other coding agents.
 
-The workflow separates observation from authority. A coding agent is good at reading a brief and locating relevant moments in a video. BrandPreflight is responsible for validating those observations and calculating the result. Its strict schemas reject malformed evidence, unknown requirements, incompatible evidence sources, and out-of-range timestamps. Prepared-media reviews also reject transcript excerpts that do not appear in the cited segment.
+The architecture separates observation from authority. The agent reads the brief, watches the video, and proposes evidence. BrandPreflight owns schema validation, requirement weighting, score calculation, verdict rules, and report signing. Required items carry more weight, and missing required disclosures or prohibited-claim violations can block a ready verdict. The same validated findings always produce the same score.
 
-The scoring model is transparent and repeatable. Required items receive more weight than normal items. Missing required disclosures or prohibited-claim violations block a ready verdict, while incomplete media processing caps the score and makes the review inconclusive. The same validated input always produces the same score.
+We also built an optional prepared-media pipeline for stronger artifact-bound review. It records the campaign digest, video duration, transcript, sampled frame timestamps, and processing completeness in a signed local manifest. In that path, BrandPreflight can reject transcript evidence that does not appear in the cited segment and visual evidence that does not overlap a sampled frame.
 
-Because briefs and media are untrusted input, local processing has explicit boundaries. In the prepared-media path, PDF and media jobs run in constrained containers with networking disabled, limited resources, and restricted filesystem access. Review artifacts are bound to the full campaign, and the final report is signed before it is saved. The creator can open that report in a local browser without uploading the raw video to a BrandPreflight service.
+For teams that enable the prepared-media path, PDF and media processing can run in constrained Docker or Podman containers with networking disabled, restricted filesystem access, and resource limits. The simple Watch-based workflow remains available for creators who want the smallest setup.
+
+The project includes unit, integration, and end-to-end tests across scoring, file boundaries, MCP tools, the CLI workflow, and the report viewer. Our final verification ran 88 tests successfully with 96.69 percent line coverage and 80.78 percent branch coverage.
 
 ## Challenges we ran into
 
-The hardest problem was making AI useful without making it the authority. A model can notice a disclosure or describe a logo, but a plausible observation is not the same as verified evidence. We had to create a contract that lets the agent contribute what it is good at while preventing it from inventing requirements, timestamps, or a favorable score.
+The hardest problem was making AI useful without letting it certify its own work. A model can find a disclosure or describe a logo, but a plausible observation is not a score. We designed a strict handoff in which the agent supplies evidence and limitations, while BrandPreflight calculates the result in code.
 
-Media review also creates difficult trust boundaries. Campaign PDFs, transcripts, captions, filenames, and even text visible inside a frame can contain untrusted instructions. We treated all of that material as data, isolated native media processing, restricted file access, validated every model-produced field, and required evidence to remain bound to the reviewed campaign and video.
+We also had to represent uncertainty honestly. In the Watch-based workflow, the agent must mark unsupported requirements as `not_verifiable` and record incomplete coverage as a limitation. The optional prepared-media pipeline adds technical checks against signed transcript, frame, and processing data. Keeping those guarantees distinct made the product more honest and easier to audit.
 
-The final challenge was uncertainty. It is tempting for an automated checker to interpret missing evidence as success. BrandPreflight does the opposite. If transcription fails, visual coverage is incomplete, or a requirement cannot be supported, the report says so and prevents a misleading ready verdict.
+Finally, campaign PDFs, transcripts, captions, filenames, and text inside video frames are untrusted input. We treat them as data rather than instructions, validate model-produced fields, restrict imported file paths, and isolate native processing when the containerized path is enabled.
 
 ## Accomplishments that we're proud of
 
-We are proud that BrandPreflight is a working end-to-end tool rather than a mockup. A creator can start with one prompt, provide a real brief and video, receive a scored review, and open a local report that points to the next edit.
+We are proud that BrandPreflight works from setup to report. A creator can begin with one prompt, provide a real brief and video, receive a scored review, and open a local results screen that points to the next edit.
 
-We are also proud of the boundary between AI judgment and deterministic verification. The model never supplies the score. Every accepted finding is connected to a campaign requirement and a cited time range, and every report leaves an auditable record of what passed, what failed, and what could not be verified.
+We are also proud of the line between AI judgment and deterministic scoring. The model never supplies the score. BrandPreflight turns its observations into a repeatable result with a clear record of the requirements, cited time ranges, limitations, and recommended changes.
 
-The project is backed by unit, integration, and end-to-end tests across scoring, media boundaries, MCP tools, the CLI workflow, and the report viewer. Our final verification ran 88 tests successfully and measured 96.69 percent line coverage and 80.78 percent branch coverage.
-
-Most of all, we turned an overlooked piece of creator busywork into a repeatable workflow. BrandPreflight does not promise perfect compliance or replace human approval. It gives creators and editors better evidence before they submit a cut, when there is still time to fix it.
+Most of all, we automated an overlooked piece of creator busywork. BrandPreflight does not promise perfect compliance or replace human approval. It gives creators and editors a repeatable, structured review before delivery, without requiring them to upload the raw video to a BrandPreflight service.
 
 ## What we learned
 
-A score alone does not create confidence. People trust a review when they can trace each result back to the brief, inspect the supporting timestamp, understand the limitations, and see the exact change that would improve the outcome.
+A score alone does not create confidence. A useful review must let someone trace a result back to the brief, inspect the cited moment, understand any gaps, and know what to change next.
 
-We also learned that honest uncertainty is a product feature. An inconclusive result can be more useful than an optimistic one because it tells the creator exactly what still needs a human check.
+We also learned that honest uncertainty is a product feature. An inconclusive finding can be more valuable than an optimistic guess because it tells the creator exactly where a human check is still needed.
 
-Finally, automation only helps if it is easy to start. The copyable setup prompt became an important part of the product because it hides the local installation details and lets the creator focus on the brief, the video, and the result.
+Finally, automation only helps when it is easy to start. The copyable setup prompt became a core part of the product because it hides installation details and keeps the creator focused on the brief, the video, and the result.
 
 ## What's next for BrandPreflight
 
-Next, we want to expand visual verification with OCR for on-screen disclosures, promo codes, and approved text, along with broader checks for logo placement and duration. We also plan to add background processing for longer videos and more focused re-checks after a creator makes an edit.
+Next, we want to add OCR for on-screen disclosures, promo codes, and approved text, along with broader checks for logo placement and duration. We also plan to support background processing for longer videos and focused re-checks after a creator makes an edit.
 
-After that, we want to test the workflow with more creators, editors, and brand teams so we can improve requirement extraction and report recommendations using real review patterns. The goal is to cover more of the sponsored-content workflow without giving up the local-first, evidence-driven foundation that makes the result trustworthy.
+After that, we want to test BrandPreflight with more creators, editors, and brand teams. Their real review patterns will help us improve requirement extraction and recommendations while preserving the local-first, evidence-driven foundation.
